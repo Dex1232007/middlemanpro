@@ -791,16 +791,18 @@ async function showMyRating(chatId: number, msgId: number, username?: string) {
 async function handleRating(chatId: number, msgId: number, rating: number, txId: string, ratedId: string, cbId: string, telegramId: number) {
   const profile = await getProfile(telegramId)
   
-  // Check if already rated
+  // Check if already rated this specific person for this transaction
+  // (buyer rates seller, seller rates buyer - these are SEPARATE ratings)
   const { data: existingRating } = await supabase
     .from('ratings')
     .select('id')
     .eq('transaction_id', txId)
     .eq('rater_id', profile.id)
+    .eq('rated_id', ratedId)
     .maybeSingle()
   
   if (existingRating) {
-    await answerCb(cbId, '❌ ဤ အရောင်းအဝယ်ကို အဆင့်သတ်မှတ်ပြီးပါပြီ', true)
+    await answerCb(cbId, '❌ ဤသူကို အဆင့်သတ်မှတ်ပြီးပါပြီ', true)
     return
   }
   
