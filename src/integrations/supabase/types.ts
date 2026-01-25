@@ -117,10 +117,13 @@ export type Database = {
           created_at: string
           id: string
           is_blocked: boolean
+          referral_code: string | null
+          referred_by: string | null
           telegram_id: number | null
           telegram_username: string | null
           ton_wallet_address: string | null
           total_ratings: number | null
+          total_referral_earnings: number | null
           updated_at: string
           user_id: string | null
         }
@@ -132,10 +135,13 @@ export type Database = {
           created_at?: string
           id?: string
           is_blocked?: boolean
+          referral_code?: string | null
+          referred_by?: string | null
           telegram_id?: number | null
           telegram_username?: string | null
           ton_wallet_address?: string | null
           total_ratings?: number | null
+          total_referral_earnings?: number | null
           updated_at?: string
           user_id?: string | null
         }
@@ -147,14 +153,25 @@ export type Database = {
           created_at?: string
           id?: string
           is_blocked?: boolean
+          referral_code?: string | null
+          referred_by?: string | null
           telegram_id?: number | null
           telegram_username?: string | null
           ton_wallet_address?: string | null
           total_ratings?: number | null
+          total_referral_earnings?: number | null
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_referred_by_fkey"
+            columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ratings: {
         Row: {
@@ -204,6 +221,97 @@ export type Database = {
             columns: ["transaction_id"]
             isOneToOne: false
             referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referral_earnings: {
+        Row: {
+          amount_ton: number
+          created_at: string
+          from_profile_id: string
+          from_transaction_id: string
+          id: string
+          level: number
+          referrer_id: string
+        }
+        Insert: {
+          amount_ton: number
+          created_at?: string
+          from_profile_id: string
+          from_transaction_id: string
+          id?: string
+          level: number
+          referrer_id: string
+        }
+        Update: {
+          amount_ton?: number
+          created_at?: string
+          from_profile_id?: string
+          from_transaction_id?: string
+          id?: string
+          level?: number
+          referrer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_earnings_from_profile_id_fkey"
+            columns: ["from_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_earnings_from_transaction_id_fkey"
+            columns: ["from_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_earnings_referrer_id_fkey"
+            columns: ["referrer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referrals: {
+        Row: {
+          created_at: string
+          id: string
+          level: number
+          referred_id: string
+          referrer_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          level?: number
+          referred_id: string
+          referrer_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          level?: number
+          referred_id?: string
+          referrer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referrals_referred_id_fkey"
+            columns: ["referred_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referrals_referrer_id_fkey"
+            columns: ["referrer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
