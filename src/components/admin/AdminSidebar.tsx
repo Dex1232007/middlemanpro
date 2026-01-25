@@ -11,7 +11,8 @@ import {
   Bot,
   PiggyBank,
   Menu,
-  X
+  X,
+  BarChart3
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -20,6 +21,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/admin' },
+  { icon: BarChart3, label: 'Analytics', path: '/admin/analytics' },
   { icon: ArrowLeftRight, label: 'ရောင်းဝယ်မှုများ', path: '/admin/transactions' },
   { icon: Users, label: 'အသုံးပြုသူများ', path: '/admin/users' },
   { icon: PiggyBank, label: 'ငွေသွင်းမှုများ', path: '/admin/deposits' },

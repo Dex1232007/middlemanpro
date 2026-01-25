@@ -10,6 +10,7 @@ import NotFound from "./pages/NotFound";
 // Admin Pages
 import AdminLogin from "./pages/admin/Login";
 import AdminDashboard from "./pages/admin/Dashboard";
+import AdminAnalytics from "./pages/admin/Analytics";
 import AdminTransactions from "./pages/admin/Transactions";
 import AdminUsers from "./pages/admin/Users";
 import AdminWithdrawals from "./pages/admin/Withdrawals";
@@ -37,6 +38,11 @@ const App = () => (
             <Route path="/admin" element={
               <ProtectedRoute requireAdmin>
                 <AdminDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/analytics" element={
+              <ProtectedRoute requireAdmin>
+                <AdminAnalytics />
               </ProtectedRoute>
             } />
             <Route path="/admin/transactions" element={
