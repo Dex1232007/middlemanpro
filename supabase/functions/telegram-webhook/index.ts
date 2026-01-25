@@ -1797,7 +1797,7 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
 async function handleDispute(chatId: number, msgId: number, txId: string, cbId: string, telegramId: number) {
   const { data: tx } = await supabase
     .from('transactions')
-    .select('*, products(*), buyer:profiles!transactions_buyer_id_fkey(*)')
+    .select('*, products(*), buyer:profiles!transactions_buyer_id_fkey(*), seller:profiles!transactions_seller_id_fkey(*)')
     .eq('id', txId)
     .single()
 
@@ -1829,11 +1829,54 @@ async function handleDispute(chatId: number, msgId: number, txId: string, cbId: 
   await supabase.from('transactions').update({ status: 'disputed' }).eq('id', txId)
   await answerCb(cbId, '⚠️ အငြင်းပွားမှု တင်ပြီး', true)
 
-  await editText(chatId, msgId, `⚠️ *အငြင်းပွားမှု တင်ပြီး*
+  const buyerUsername = tx.buyer?.telegram_username 
+    ? `@${tx.buyer.telegram_username}` 
+    : `ID: ${tx.buyer?.telegram_id || 'Unknown'}`
 
-📦 ${tx.products?.title}
+  // Update buyer's message
+  await editText(chatId, msgId, `⚠️ *အငြင်းပွားမှု တင်သွင်းပြီး*
 
-Admin စစ်ဆေးပြီး ဆက်သွယ်ပါမည်`, backBtn())
+╔══════════════════════════════╗
+║                              ║
+║    🚨 *DISPUTE OPENED*       ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+💵 *${tx.amount_ton} TON*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 *အခြေအနေ:* အငြင်းပွားမှု စိစစ်နေပါသည်
+
+⏳ Admin မှ စစ်ဆေးပြီး နှစ်ဘက်စလုံးသို့ ဆက်သွယ်ပါမည်
+💬 လိုအပ်ပါက Admin မှ သင့်ထံ မေးမြန်းနိုင်ပါသည်
+
+🔒 ငွေကို Admin က ထိန်းသိမ်းထားပါသည်`, backBtn())
+
+  // Notify seller about the dispute
+  if (tx.seller?.telegram_id) {
+    await sendMessage(tx.seller.telegram_id, `⚠️ *အငြင်းပွားမှု ဖွင့်လှစ်ခံရပြီး*
+
+╔══════════════════════════════╗
+║                              ║
+║    🚨 *DISPUTE OPENED*       ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+💵 *${tx.amount_ton} TON*
+👤 *ဝယ်သူ:* ${buyerUsername}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 *အခြေအနေ:* ဝယ်သူမှ အငြင်းပွားမှု တင်သွင်းထားပါသည်
+
+⏳ Admin မှ စစ်ဆေးပြီး နှစ်ဘက်စလုံးသို့ ဆက်သွယ်ပါမည်
+💬 လိုအပ်ပါက Admin မှ သင့်ထံ မေးမြန်းနိုင်ပါသည်
+
+🔒 ငွေကို Admin က ထိန်းသိမ်းထားပါသည်`, backBtn())
+  }
 
   // Notify admin about new dispute
   try {
