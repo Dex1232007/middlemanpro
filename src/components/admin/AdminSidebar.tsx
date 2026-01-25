@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -11,7 +11,6 @@ import {
   Bot,
   PiggyBank,
   Menu,
-  X,
   BarChart3,
   Megaphone
 } from 'lucide-react';
