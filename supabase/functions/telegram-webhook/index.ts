@@ -228,7 +228,7 @@ const mainMenu = () => ({
     [{ text: '💸 ငွေထုတ်', callback_data: 'm:wd' }, { text: '💳 လက်ကျန်', callback_data: 'm:bal' }],
     [{ text: '📋 အမှာစာများ', callback_data: 'm:ord' }, { text: '🛍️ ကျွန်ုပ်၏လင့်များ', callback_data: 'm:mylinks' }],
     [{ text: '📜 မှတ်တမ်း', callback_data: 'm:hist' }, { text: '⭐ ကျွန်ုပ်၏အဆင့်', callback_data: 'm:rating' }],
-    [{ text: '❓ အကူအညီ', callback_data: 'm:help' }],
+    [{ text: '🎁 Referral', callback_data: 'm:ref' }, { text: '❓ အကူအညီ', callback_data: 'm:help' }],
   ],
 })
 
@@ -316,7 +316,17 @@ const deleteConfirmBtns = (msgId: number) => ({
 })
 
 // ==================== DATABASE ====================
-async function getProfile(telegramId: number, username?: string) {
+// Generate unique referral code (6 chars alphanumeric)
+function generateReferralCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Avoid confusing chars like 0/O, 1/I
+  let code = ''
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return code
+}
+
+async function getProfile(telegramId: number, username?: string, referrerCode?: string) {
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
@@ -324,20 +334,174 @@ async function getProfile(telegramId: number, username?: string) {
     .single()
 
   if (profile) {
+    // Update username if changed
     if (username && profile.telegram_username !== username) {
       await supabase.from('profiles').update({ telegram_username: username }).eq('id', profile.id)
+    }
+    // Generate referral code if missing
+    if (!profile.referral_code) {
+      const refCode = generateReferralCode()
+      await supabase.from('profiles').update({ referral_code: refCode }).eq('id', profile.id)
+      profile.referral_code = refCode
     }
     return profile
   }
 
+  // Create new profile with referral code
+  const refCode = generateReferralCode()
   const { data: newProfile, error } = await supabase
     .from('profiles')
-    .insert({ telegram_id: telegramId, telegram_username: username || null, balance: 0 })
+    .insert({ 
+      telegram_id: telegramId, 
+      telegram_username: username || null, 
+      balance: 0,
+      referral_code: refCode
+    })
     .select()
     .single()
 
   if (error) throw error
+
+  // If referrer code provided, create referral relationships
+  if (referrerCode && newProfile) {
+    await processReferral(newProfile.id, referrerCode)
+  }
+
   return newProfile
+}
+
+// Process referral when new user joins via referral link
+async function processReferral(newUserId: string, referrerCode: string) {
+  try {
+    // Find referrer by code
+    const { data: referrer } = await supabase
+      .from('profiles')
+      .select('id, telegram_id, telegram_username, referred_by')
+      .eq('referral_code', referrerCode)
+      .single()
+
+    if (!referrer || referrer.id === newUserId) return
+
+    // Update new user's referred_by
+    await supabase.from('profiles').update({ referred_by: referrer.id }).eq('id', newUserId)
+
+    // Create Level 1 referral relationship
+    await supabase.from('referrals').insert({
+      referrer_id: referrer.id,
+      referred_id: newUserId,
+      level: 1
+    })
+
+    // If referrer was also referred, create Level 2 relationship
+    if (referrer.referred_by) {
+      await supabase.from('referrals').insert({
+        referrer_id: referrer.referred_by,
+        referred_id: newUserId,
+        level: 2
+      })
+    }
+
+    // Notify referrer about new referral
+    if (referrer.telegram_id) {
+      await sendMessage(referrer.telegram_id, `🎉 *Referral အသစ် ရရှိပြီး!*
+
+━━━━━━━━━━━━━━━
+👤 သင်၏ Referral Link မှတဆင့် 
+   အသုံးပြုသူ အသစ် စာရင်းသွင်းပြီး!
+━━━━━━━━━━━━━━━
+
+💰 သူတို့၏ transaction များမှ 
+   commission ရရှိပါမည်!
+
+📊 *Commission Rates:*
+• Level 1: 10%
+• Level 2: 5%`)
+    }
+
+    console.log(`Referral created: ${referrer.id} -> ${newUserId}`)
+  } catch (e) {
+    console.error('Process referral error:', e)
+  }
+}
+
+// Process referral earnings when a transaction is completed
+async function processReferralEarnings(transactionId: string, commissionTon: number, buyerId: string | null) {
+  if (!buyerId || !commissionTon || commissionTon <= 0) return
+
+  try {
+    // Get referral rates from settings
+    const { data: l1Setting } = await supabase.from('settings').select('value').eq('key', 'referral_l1_rate').maybeSingle()
+    const { data: l2Setting } = await supabase.from('settings').select('value').eq('key', 'referral_l2_rate').maybeSingle()
+    
+    const l1Rate = l1Setting ? parseFloat(l1Setting.value) : 10 // 10% default
+    const l2Rate = l2Setting ? parseFloat(l2Setting.value) : 5  // 5% default
+
+    // Get buyer's referrers (both L1 and L2)
+    const { data: referrals } = await supabase
+      .from('referrals')
+      .select('referrer_id, level')
+      .eq('referred_id', buyerId)
+
+    if (!referrals || referrals.length === 0) {
+      console.log(`No referrers found for buyer ${buyerId}`)
+      return
+    }
+
+    const commission = Number(commissionTon)
+
+    for (const ref of referrals) {
+      const rate = ref.level === 1 ? l1Rate : l2Rate
+      const earnings = Math.round((commission * rate / 100) * 10000) / 10000
+
+      if (earnings <= 0) continue
+
+      // Record referral earning
+      await supabase.from('referral_earnings').insert({
+        referrer_id: ref.referrer_id,
+        from_profile_id: buyerId,
+        from_transaction_id: transactionId,
+        amount_ton: earnings,
+        level: ref.level
+      })
+
+      // Credit referrer's balance
+      const { data: referrer } = await supabase
+        .from('profiles')
+        .select('id, balance, total_referral_earnings, telegram_id')
+        .eq('id', ref.referrer_id)
+        .single()
+
+      if (referrer) {
+        const newBalance = Number(referrer.balance) + earnings
+        const newTotalEarnings = Number(referrer.total_referral_earnings || 0) + earnings
+
+        await supabase.from('profiles').update({
+          balance: newBalance,
+          total_referral_earnings: newTotalEarnings
+        }).eq('id', referrer.id)
+
+        // Notify referrer
+        if (referrer.telegram_id) {
+          await sendMessage(referrer.telegram_id, `🎁 *Referral Commission ရရှိပြီး!*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💰 *+${earnings.toFixed(4)} TON*
+📊 Level ${ref.level} (${rate}%)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💳 လက်ကျန်: *${newBalance.toFixed(4)} TON*
+🎁 စုစုပေါင်း Referral: *${newTotalEarnings.toFixed(4)} TON*
+
+✅ သင်၏ Referral မှ transaction ပြီးစီးသောကြောင့်
+   commission ရရှိပါသည်!`)
+        }
+
+        console.log(`Referral earning credited: ${earnings} TON to ${referrer.id} (L${ref.level})`)
+      }
+    }
+  } catch (e) {
+    console.error('Process referral earnings error:', e)
+  }
 }
 
 // Check if user is blocked
@@ -488,6 +652,70 @@ async function showHelp(chatId: number, msgId: number) {
 • Wallet လိပ်စာ မှန်ကန်ရန် စစ်ဆေးပါ
 • ပြဿနာရှိပါက "Dispute" ဖွင့်ပါ`
   
+  const edited = await editText(chatId, msgId, text, backBtn())
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    await sendMessage(chatId, text, backBtn())
+  }
+}
+
+// ==================== REFERRAL MENU ====================
+async function showReferral(chatId: number, msgId: number, username?: string) {
+  const profile = await getProfile(chatId, username)
+  
+  // Get bot username for link
+  const { data: botSetting } = await supabase.from('settings').select('value').eq('key', 'bot_username').maybeSingle()
+  const botUsername = botSetting?.value || 'YourBot'
+  
+  // Get referral stats
+  const { count: l1Count } = await supabase
+    .from('referrals')
+    .select('*', { count: 'exact', head: true })
+    .eq('referrer_id', profile.id)
+    .eq('level', 1)
+
+  const { count: l2Count } = await supabase
+    .from('referrals')
+    .select('*', { count: 'exact', head: true })
+    .eq('referrer_id', profile.id)
+    .eq('level', 2)
+
+  const totalEarnings = Number(profile.total_referral_earnings) || 0
+
+  const refLink = `https://t.me/${botUsername}?start=ref_${profile.referral_code}`
+
+  const text = `🎁 *Referral Program*
+
+╔══════════════════════════════╗
+║                              ║
+║     🎁 *EARN COMMISSION*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+🔗 *သင်၏ Referral Link:*
+\`${refLink}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 *Commission Rates:*
+• Level 1: *10%* (တိုက်ရိုက် refer)
+• Level 2: *5%* (သင် refer လူ၏ referral)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+👥 *သင်၏ Referrals:*
+• Level 1: *${l1Count || 0}* ယောက်
+• Level 2: *${l2Count || 0}* ယောက်
+
+💰 *စုစုပေါင်း ရရှိငွေ:*
+*${totalEarnings.toFixed(4)} TON*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📢 *သင်၏ Referral Link ကို 
+   မိတ်ဆွေများထံ မျှဝေပါ!*
+
+💡 သူတို့ transaction လုပ်တိုင်း
+   သင် commission ရရှိမည်!`
+
   const edited = await editText(chatId, msgId, text, backBtn())
   if (!edited) {
     await deleteMsg(chatId, msgId)
@@ -1809,6 +2037,9 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
 
   await supabase.from('transactions').update({ status: 'completed', confirmed_at: new Date().toISOString() }).eq('id', txId)
 
+  // Process referral earnings
+  await processReferralEarnings(txId, tx.commission_ton, tx.buyer_id)
+
   // Credit seller
   if (tx.seller) {
     const newBal = Number(tx.seller.balance) + Number(tx.seller_receives_ton)
@@ -2078,6 +2309,11 @@ async function handleMessage(msg: { chat: { id: number }; from?: { username?: st
     const parts = text.split(' ')
     if (parts[1]?.startsWith('buy_')) {
       await handleBuyLink(chatId, parts[1].replace('buy_', ''), username)
+    } else if (parts[1]?.startsWith('ref_')) {
+      // Handle referral link - new user joining via referral
+      const referralCode = parts[1].replace('ref_', '')
+      await getProfile(chatId, username, referralCode) // Pass referral code to getProfile
+      await showHome(chatId, undefined, username)
     } else {
       await showHome(chatId, undefined, username)
     }
@@ -2220,6 +2456,7 @@ async function handleCallback(cb: { id: string; from: { id: number; username?: s
       case 'mylinks': await showMyLinks(chatId, msgId, username); break
       case 'hist': await showHistory(chatId, msgId, username); break
       case 'rating': await showMyRating(chatId, msgId, username); break
+      case 'ref': await showReferral(chatId, msgId, username); break
       case 'help': await showHelp(chatId, msgId); break
     }
     return
