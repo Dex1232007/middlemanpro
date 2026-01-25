@@ -26,13 +26,23 @@ function progressBar(step: number, total: number): string {
 }
 
 // ==================== TELEGRAM ====================
-async function sendTg(chatId: number, text: string) {
+async function sendTg(chatId: number, text: string, keyboard?: object) {
+  const body: Record<string, unknown> = { chat_id: chatId, text, parse_mode: 'Markdown' }
+  if (keyboard) {
+    body.reply_markup = keyboard
+  }
   const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+    body: JSON.stringify(body),
   })
   console.log('TG send:', (await res.json()).ok ? 'ok' : 'fail')
+}
+
+function mainMenuBtn() {
+  return {
+    inline_keyboard: [[{ text: '🏠 ပင်မစာမျက်နှာ', callback_data: 'm:home' }]]
+  }
 }
 
 async function editTgMessage(chatId: number, msgId: number, text: string) {
@@ -419,7 +429,7 @@ async function processWithdrawals() {
 
 💰 *လက်ကျန်:* ${newBalance.toFixed(4)} TON
 
-🎉 ကျေးဇူးတင်ပါသည်!`)
+🎉 ကျေးဇူးတင်ပါသည်!`, mainMenuBtn())
       }
       
       console.log(`✅ Withdrawal ${wd.id} completed: ${sendAmount.toFixed(4)} TON`)
