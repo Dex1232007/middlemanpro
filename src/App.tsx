@@ -15,6 +15,7 @@ import AdminUsers from "./pages/admin/Users";
 import AdminWithdrawals from "./pages/admin/Withdrawals";
 import AdminDeposits from "./pages/admin/Deposits";
 import AdminDisputes from "./pages/admin/Disputes";
+import InitialSetup from "./pages/admin/InitialSetup";
 import AdminSettings from "./pages/admin/Settings";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/" element={<Navigate to="/admin" replace />} />
             
             {/* Admin Routes */}
+            <Route path="/admin/setup" element={<InitialSetup />} />
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/admin" element={
               <ProtectedRoute requireAdmin>
