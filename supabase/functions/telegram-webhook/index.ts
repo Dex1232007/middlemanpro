@@ -859,14 +859,24 @@ async function handleRatingComment(chatId: number, comment: string, msgId: numbe
   
   await deleteUserState(chatId)
   
-  await editText(chatId, msgId, `✅ *ကျေးဇူးတင်ပါသည်!*
+  const thankYouMsg = `✅ *ကျေးဇူးတင်ပါသည်!*
 
 ━━━━━━━━━━━━━━━
 ${'⭐'.repeat(rating)} ${rating}/5
 ${safeComment ? `💬 "${safeComment}"` : ''}
 ━━━━━━━━━━━━━━━
 
-အဆင့်သတ်မှတ်ပေးသည့်အတွက် ကျေးဇူးပါ 🙏`, backBtn())
+အဆင့်သတ်မှတ်ပေးသည့်အတွက် ကျေးဇူးပါ 🙏`
+
+  // Try editText first, if fails (photo message), try editMessageMedia, then sendMessage
+  const textEdited = await editText(chatId, msgId, thankYouMsg, backBtn())
+  if (!textEdited) {
+    const thankQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('THANKS')}&bgcolor=90EE90`
+    const mediaEdited = await editMessageMedia(chatId, msgId, thankQR, thankYouMsg, backBtn())
+    if (!mediaEdited) {
+      await sendMessage(chatId, thankYouMsg, backBtn())
+    }
+  }
 }
 
 // ==================== ACTION HANDLERS ====================
@@ -2132,13 +2142,24 @@ async function handleCallback(cb: { id: string; from: { id: number; username?: s
       await deleteUserState(chatId)
       const rating = Number(state.data.rating)
       await answerCb(cb.id, '✅ ကျော်လိုက်ပြီး!')
-      await editText(chatId, msgId, `✅ *ကျေးဇူးတင်ပါသည်!*
+      
+      const thankYouMsg = `✅ *ကျေးဇူးတင်ပါသည်!*
 
 ━━━━━━━━━━━━━━━
 ${'⭐'.repeat(rating)} ${rating}/5
 ━━━━━━━━━━━━━━━
 
-အဆင့်သတ်မှတ်ပေးသည့်အတွက် ကျေးဇူးပါ 🙏`, backBtn())
+အဆင့်သတ်မှတ်ပေးသည့်အတွက် ကျေးဇူးပါ 🙏`
+
+      // Try editText first, if fails (photo message), try editMessageMedia, then sendMessage
+      const textEdited = await editText(chatId, msgId, thankYouMsg, backBtn())
+      if (!textEdited) {
+        const thankQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('THANKS')}&bgcolor=90EE90`
+        const mediaEdited = await editMessageMedia(chatId, msgId, thankQR, thankYouMsg, backBtn())
+        if (!mediaEdited) {
+          await sendMessage(chatId, thankYouMsg, backBtn())
+        }
+      }
     } else {
       await answerCb(cb.id)
     }
