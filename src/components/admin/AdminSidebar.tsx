@@ -12,7 +12,8 @@ import {
   PiggyBank,
   Menu,
   X,
-  BarChart3
+  BarChart3,
+  Megaphone
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -27,6 +28,7 @@ const menuItems = [
   { icon: PiggyBank, label: 'ငွေသွင်းမှုများ', path: '/admin/deposits' },
   { icon: Wallet, label: 'ငွေထုတ်ယူမှုများ', path: '/admin/withdrawals' },
   { icon: AlertTriangle, label: 'အငြင်းပွားမှုများ', path: '/admin/disputes' },
+  { icon: Megaphone, label: 'ကြေညာချက်', path: '/admin/broadcast' },
   { icon: Settings, label: 'ဆက်တင်များ', path: '/admin/settings' },
 ];
 
