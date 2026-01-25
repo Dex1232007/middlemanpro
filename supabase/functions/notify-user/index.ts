@@ -30,7 +30,7 @@ async function sendTelegramMessage(chatId: number, text: string, parseMode = 'Ma
 }
 
 interface NotifyRequest {
-  type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal'
+  type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx'
   profile_id?: string
   telegram_id?: number
   amount?: number
@@ -43,6 +43,9 @@ interface NotifyRequest {
   user_telegram_username?: string
   transaction_link?: string
   destination_wallet?: string
+  // High-value transaction fields
+  buyer_username?: string
+  seller_username?: string
 }
 
 async function verifyAdminAuth(req: Request): Promise<{ authorized: boolean; error?: string }> {
@@ -111,7 +114,7 @@ Deno.serve(async (req) => {
     let telegramId = body.telegram_id
 
     // For admin notifications, get admin telegram ID from settings
-    if (body.type === 'admin_new_dispute' || body.type === 'admin_new_withdrawal') {
+    if (body.type === 'admin_new_dispute' || body.type === 'admin_new_withdrawal' || body.type === 'admin_high_value_tx') {
       const { data: adminSetting } = await adminSupabase
         .from('settings')
         .select('value')
@@ -229,6 +232,20 @@ ${body.tx_hash ? `TX Hash: \`${body.tx_hash}\`` : ''}`
 📤 Destination: \`${body.destination_wallet?.substring(0, 10)}...${body.destination_wallet?.slice(-6) || 'N/A'}\`
 
 ကျေးဇူးပြု၍ Admin Dashboard မှ စစ်ဆေးပါ။`
+        break
+
+      case 'admin_high_value_tx':
+        message = `💎 *High-Value Transaction!*
+
+━━━━━━━━━━━━━━━
+📦 ${body.product_title || 'ပစ္စည်း'}
+💰 ပမာဏ: *${Number(body.amount).toFixed(4)} TON*
+🛒 ဝယ်သူ: ${body.buyer_username ? `@${body.buyer_username}` : 'Unknown'}
+🏪 ရောင်းသူ: ${body.seller_username ? `@${body.seller_username}` : 'Unknown'}
+${body.tx_hash ? `🔗 Hash: \`${body.tx_hash.substring(0, 16)}...\`` : ''}
+━━━━━━━━━━━━━━━
+
+✅ ငွေပေးချေမှု အတည်ပြုပြီးပါပြီ။`
         break
 
       case 'custom':

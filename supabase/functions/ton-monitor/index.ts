@@ -515,6 +515,31 @@ Hash: \`${hash.substring(0, 20)}...\``)
 ⏳ ရောင်းသူမှ ပစ္စည်းပို့ပေးပါမည်
 ⚠️ ပစ္စည်းမရမီ "ရရှိပြီး" မနှိပ်ပါ!`)
         }
+
+        // Notify admin for high-value transactions (>= 50 TON)
+        const HIGH_VALUE_THRESHOLD = 50
+        if (amount >= HIGH_VALUE_THRESHOLD) {
+          try {
+            await fetch(`${SUPABASE_URL}/functions/v1/notify-user`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+              },
+              body: JSON.stringify({
+                type: 'admin_high_value_tx',
+                amount: amount,
+                product_title: pendingTx.products?.title,
+                buyer_username: pendingTx.buyer?.telegram_username,
+                seller_username: pendingTx.seller?.telegram_username,
+                tx_hash: hash
+              })
+            })
+            console.log(`Admin notified about high-value transaction: ${amount} TON`)
+          } catch (e) {
+            console.error('Failed to notify admin about high-value tx:', e)
+          }
+        }
         return
       }
     }
