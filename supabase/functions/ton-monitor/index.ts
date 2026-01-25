@@ -485,16 +485,27 @@ Hash: \`${hash.substring(0, 20)}...\``)
             ? `@${pendingTx.buyer.telegram_username}` 
             : `ID: ${pendingTx.buyer?.telegram_id || 'Unknown'}`
           
-          await sendTg(pendingTx.seller.telegram_id, `💰 *ငွေရရှိပြီး!*
+          await sendTg(pendingTx.seller.telegram_id, `🎉 *အော်ဒါအသစ် ရရှိပြီး!*
 
-━━━━━━━━━━━━━━━
+╔══════════════════════════════╗
+║                              ║
+║      💰 *ငွေလက်ခံပြီး*        ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${pendingTx.products?.title}*
 💵 *${amount.toFixed(4)} TON*
-👤 ${buyerUsername}
-━━━━━━━━━━━━━━━
+👤 *ဝယ်သူ:* ${buyerUsername}
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💬 Chat လုပ်ပြီး ပစ္စည်းပို့ပါ
-ပို့ပြီးရင် "ပို့ပြီး" နှိပ်ပါ`, sellerBtns(pendingTx.id))
+✅ ဝယ်သူမှ TON ဖြင့် ငွေပေးချေပြီးပါပြီ
+
+📦 *ပစ္စည်းပို့ရန်:*
+1️⃣ ဝယ်သူနှင့် Chat လုပ်ပြီး ပစ္စည်းပို့ပါ
+2️⃣ ပို့ပြီးပါက "ပို့ပြီး" ခလုပ်နှိပ်ပါ
+
+⚠️ *သတိ:* ပစ္စည်းမပို့မီ "ပို့ပြီး" မနှိပ်ပါနှင့်`, sellerBtns(pendingTx.id))
         }
 
         // Update buyer's QR message using editMessageMedia
