@@ -401,17 +401,25 @@ async function processWithdrawals() {
         
         await sendTg(profile.telegram_id, `✅ *ငွေထုတ်ယူမှု အောင်မြင်ပါပြီ!*
 
-━━━━━━━━━━━━━━━
-💵 ထုတ်ယူပမာဏ: *${withdrawAmount.toFixed(4)} TON*
-📊 Commission (${commRate}%): *-${fee.toFixed(4)} TON*
-✅ ပေးပို့ပြီး: *${sendAmount.toFixed(4)} TON*
-💳 *${wd.destination_wallet.substring(0, 10)}...${wd.destination_wallet.slice(-6)}*
-━━━━━━━━━━━━━━━
+╔══════════════════════════════╗
+║                              ║
+║     ✅ *SENT SUCCESS*        ║
+║                              ║
+╚══════════════════════════════╝
 
-🔗 Ref: \`${txRef}\`
-⏱️ ၅ မိနစ်အတွင်း ရောက်ရှိပါမည်။
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ထုတ်ယူပမာဏ:* ${withdrawAmount.toFixed(4)} TON
+📊 *Commission (${commRate}%):* -${fee.toFixed(4)} TON
+✅ *ပေးပို့ပြီး:* ${sendAmount.toFixed(4)} TON
+💳 *Wallet:* ${wd.destination_wallet.substring(0, 10)}...${wd.destination_wallet.slice(-6)}
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
-✨ *လက်ကျန်:* ${newBalance.toFixed(4)} TON`)
+🔗 *Ref:* \`${txRef}\`
+⏱️ ၅ မိနစ်အတွင်း သင်၏ Wallet သို့ ရောက်ရှိပါမည်
+
+💰 *လက်ကျန်:* ${newBalance.toFixed(4)} TON
+
+🎉 ကျေးဇူးတင်ပါသည်!`)
       }
       
       console.log(`✅ Withdrawal ${wd.id} completed: ${sendAmount.toFixed(4)} TON`)
@@ -433,13 +441,20 @@ async function processWithdrawals() {
       if (wd.profile?.telegram_id) {
         await sendTg(wd.profile.telegram_id, `❌ *ငွေထုတ်ယူမှု မအောင်မြင်ပါ*
 
-━━━━━━━━━━━━━━━
-💵 *${wd.amount_ton} TON*
-━━━━━━━━━━━━━━━
+╔══════════════════════════════╗
+║                              ║
+║     ❌ *SEND FAILED*         ║
+║                              ║
+╚══════════════════════════════╝
 
-ပြဿနာ: ${String(e).substring(0, 100)}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${wd.amount_ton} TON
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
-ထပ်မံကြိုးစားပါ သို့မဟုတ် Admin ထံ ဆက်သွယ်ပါ။`)
+⚠️ *ပြဿနာ:* ${String(e).substring(0, 100)}
+
+🔄 စနစ်မှ အလိုအလျောက် ထပ်မံကြိုးစားပါမည်
+💬 အကူအညီလိုပါက Admin ထံ ဆက်သွယ်ပါ`)
       }
       
       failed++
