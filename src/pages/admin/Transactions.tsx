@@ -59,7 +59,13 @@ export default function AdminTransactions() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
+  const [minAmount, setMinAmount] = useState<string>('');
+  const [maxAmount, setMaxAmount] = useState<string>('');
+  const [ratingFilter, setRatingFilter] = useState<string>('all');
   const [isExporting, setIsExporting] = useState(false);
+
+  // Store seller/buyer info for display
+  const [profiles, setProfiles] = useState<Record<string, { telegram_username: string | null }>>({});
 
   useEffect(() => {
     fetchTransactions();
@@ -99,6 +105,17 @@ export default function AdminTransactions() {
 
       if (ratingsError) throw ratingsError;
 
+      // Fetch profiles for seller/buyer info
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, telegram_username');
+
+      const profilesMap: Record<string, { telegram_username: string | null }> = {};
+      profilesData?.forEach((p) => {
+        profilesMap[p.id] = { telegram_username: p.telegram_username };
+      });
+      setProfiles(profilesMap);
+
       // Map ratings to transactions
       const txWithRatings: TransactionWithRatings[] = (txData || []).map((tx) => ({
         ...tx,
@@ -114,9 +131,15 @@ export default function AdminTransactions() {
   };
 
   const filteredTransactions = transactions.filter((tx) => {
+    // Search by link, TX hash, or seller/buyer username
+    const sellerUsername = tx.seller_id ? profiles[tx.seller_id]?.telegram_username || '' : '';
+    const buyerUsername = tx.buyer_id ? profiles[tx.buyer_id]?.telegram_username || '' : '';
+    
     const matchesSearch = 
       tx.unique_link.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tx.ton_tx_hash?.toLowerCase().includes(searchTerm.toLowerCase());
+      tx.ton_tx_hash?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      sellerUsername.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      buyerUsername.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = statusFilter === 'all' || tx.status === statusFilter;
     
@@ -124,7 +147,26 @@ export default function AdminTransactions() {
     const matchesDateFrom = !dateFrom || txDate >= dateFrom;
     const matchesDateTo = !dateTo || txDate <= new Date(dateTo.getTime() + 24 * 60 * 60 * 1000 - 1);
     
-    return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
+    // Amount filters
+    const amount = Number(tx.amount_ton);
+    const matchesMinAmount = !minAmount || amount >= parseFloat(minAmount);
+    const matchesMaxAmount = !maxAmount || amount <= parseFloat(maxAmount);
+    
+    // Rating filter
+    const hasRating = tx.ratings && tx.ratings.length > 0;
+    const avgRating = hasRating ? tx.ratings!.reduce((sum, r) => sum + r.rating, 0) / tx.ratings!.length : 0;
+    let matchesRating = true;
+    if (ratingFilter === 'with_rating') {
+      matchesRating = hasRating;
+    } else if (ratingFilter === 'no_rating') {
+      matchesRating = !hasRating;
+    } else if (ratingFilter === 'high') {
+      matchesRating = hasRating && avgRating >= 4;
+    } else if (ratingFilter === 'low') {
+      matchesRating = hasRating && avgRating < 3;
+    }
+    
+    return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo && matchesMinAmount && matchesMaxAmount && matchesRating;
   });
 
   const clearFilters = () => {
@@ -132,7 +174,12 @@ export default function AdminTransactions() {
     setStatusFilter('all');
     setDateFrom(undefined);
     setDateTo(undefined);
+    setMinAmount('');
+    setMaxAmount('');
+    setRatingFilter('all');
   };
+
+  const hasActiveFilters = searchTerm || statusFilter !== 'all' || dateFrom || dateTo || minAmount || maxAmount || ratingFilter !== 'all';
 
   const exportToCSV = () => {
     if (filteredTransactions.length === 0) {
@@ -226,7 +273,7 @@ export default function AdminTransactions() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Link သို့မဟုတ် TX Hash ဖြင့် ရှာပါ..."
+                  placeholder="Link, TX Hash, ရောင်းသူ/ဝယ်သူ အမည်ဖြင့် ရှာပါ..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -248,10 +295,10 @@ export default function AdminTransactions() {
               </Select>
             </div>
 
-            {/* Row 2: Date Range Filters */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            {/* Row 2: Date Range & Amount Filters */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center flex-wrap">
               <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-muted-foreground" />
+                <Calendar className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">ရက်စွဲ:</span>
               </div>
               
@@ -260,12 +307,12 @@ export default function AdminTransactions() {
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
+                    size="sm"
                     className={cn(
-                      "w-full sm:w-[160px] justify-start text-left font-normal",
+                      "w-[130px] justify-start text-left font-normal",
                       !dateFrom && "text-muted-foreground"
                     )}
                   >
-                    <Calendar className="mr-2 h-4 w-4" />
                     {dateFrom ? format(dateFrom, "yyyy-MM-dd") : "မှ"}
                   </Button>
                 </PopoverTrigger>
@@ -280,19 +327,19 @@ export default function AdminTransactions() {
                 </PopoverContent>
               </Popover>
 
-              <span className="hidden sm:inline text-muted-foreground">-</span>
+              <span className="text-muted-foreground">-</span>
 
               {/* Date To */}
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
+                    size="sm"
                     className={cn(
-                      "w-full sm:w-[160px] justify-start text-left font-normal",
+                      "w-[130px] justify-start text-left font-normal",
                       !dateTo && "text-muted-foreground"
                     )}
                   >
-                    <Calendar className="mr-2 h-4 w-4" />
                     {dateTo ? format(dateTo, "yyyy-MM-dd") : "ထိ"}
                   </Button>
                 </PopoverTrigger>
@@ -307,15 +354,61 @@ export default function AdminTransactions() {
                 </PopoverContent>
               </Popover>
 
+              <div className="h-6 w-px bg-border hidden sm:block" />
+
+              {/* Amount Range */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">ပမာဏ:</span>
+                <Input
+                  type="number"
+                  placeholder="အနည်းဆုံး"
+                  value={minAmount}
+                  onChange={(e) => setMinAmount(e.target.value)}
+                  className="w-[100px] h-9"
+                  min="0"
+                  step="0.01"
+                />
+                <span className="text-muted-foreground">-</span>
+                <Input
+                  type="number"
+                  placeholder="အများဆုံး"
+                  value={maxAmount}
+                  onChange={(e) => setMaxAmount(e.target.value)}
+                  className="w-[100px] h-9"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+            </div>
+
+            {/* Row 3: Rating Filter & Clear */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2">
+                <Star className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Rating:</span>
+              </div>
+              <Select value={ratingFilter} onValueChange={setRatingFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Rating filter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">အားလုံး</SelectItem>
+                  <SelectItem value="with_rating">Rating ရှိသည်</SelectItem>
+                  <SelectItem value="no_rating">Rating မရှိသေး</SelectItem>
+                  <SelectItem value="high">⭐⭐⭐⭐+ (4+)</SelectItem>
+                  <SelectItem value="low">⭐⭐ အောက် (&lt;3)</SelectItem>
+                </SelectContent>
+              </Select>
+
               {/* Clear Filters Button */}
-              {(searchTerm || statusFilter !== 'all' || dateFrom || dateTo) && (
+              {hasActiveFilters && (
                 <Button 
                   variant="ghost" 
                   size="sm" 
                   onClick={clearFilters}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  ✕ Filter ရှင်းမည်
+                  ✕ Filter အားလုံး ရှင်းမည်
                 </Button>
               )}
             </div>
