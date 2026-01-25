@@ -1403,7 +1403,7 @@ Admin ထံ ဆက်သွယ်ပါ။`, backBtn())
 async function handleBuyLink(chatId: number, link: string, username?: string) {
   const { data: tx } = await supabase
     .from('transactions')
-    .select('*, products(*), seller:profiles!transactions_seller_id_fkey(telegram_username)')
+    .select('*, products(*), seller:profiles!transactions_seller_id_fkey(telegram_username, avg_rating, total_ratings)')
     .eq('unique_link', link)
     .single()
 
