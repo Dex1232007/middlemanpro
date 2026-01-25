@@ -1,4 +1,4 @@
-import { Star } from 'lucide-react';
+import { Star, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Tooltip,
@@ -12,9 +12,10 @@ interface RatingDisplayProps {
   comment?: string | null;
   size?: 'sm' | 'md';
   showEmpty?: boolean;
+  showComment?: boolean;
 }
 
-export function RatingDisplay({ rating, comment, size = 'sm', showEmpty = true }: RatingDisplayProps) {
+export function RatingDisplay({ rating, comment, size = 'sm', showEmpty = true, showComment = true }: RatingDisplayProps) {
   if (rating === null || rating === undefined) {
     if (!showEmpty) return null;
     return (
@@ -41,18 +42,29 @@ export function RatingDisplay({ rating, comment, size = 'sm', showEmpty = true }
     </div>
   );
 
-  if (comment) {
+  // Show comment inline below stars
+  if (comment && showComment) {
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="cursor-pointer">{starsDisplay}</div>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-xs">
-            <p className="text-sm">{comment}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <div className="flex flex-col gap-1">
+        {starsDisplay}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-start gap-1 cursor-pointer max-w-[200px]">
+                <MessageSquare className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
+                <span className="text-xs text-muted-foreground line-clamp-2 italic">
+                  "{comment.length > 50 ? comment.substring(0, 50) + '...' : comment}"
+                </span>
+              </div>
+            </TooltipTrigger>
+            {comment.length > 50 && (
+              <TooltipContent className="max-w-xs">
+                <p className="text-sm">"{comment}"</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+      </div>
     );
   }
 
