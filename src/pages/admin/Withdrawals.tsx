@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { Search, RefreshCw, Check, X, Loader2, Zap, Hand, Play, Download, Calendar, Filter } from 'lucide-react';
+import { Search, RefreshCw, Check, X, Loader2, Zap, Hand, Play, Download, Calendar, Filter, Copy } from 'lucide-react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { WithdrawalStatusBadge } from '@/components/admin/StatusBadge';
 import { Button } from '@/components/ui/button';
@@ -538,9 +538,22 @@ export default function AdminWithdrawals() {
                             {receiveAmount.toFixed(4)} TON
                           </TableCell>
                           <TableCell>
-                            <code className="rounded bg-muted px-2 py-1 text-xs">
-                              {wd.destination_wallet.slice(0, 8)}...{wd.destination_wallet.slice(-6)}
-                            </code>
+                            <div className="flex items-center gap-1">
+                              <code className="rounded bg-muted px-2 py-1 text-xs">
+                                {wd.destination_wallet.slice(0, 8)}...{wd.destination_wallet.slice(-6)}
+                              </code>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(wd.destination_wallet);
+                                  toast.success('Wallet address copied!');
+                                }}
+                              >
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                            </div>
                           </TableCell>
                           <TableCell>
                             <WithdrawalStatusBadge status={wd.status} />
@@ -603,9 +616,21 @@ export default function AdminWithdrawals() {
                       <span>ရရှိမည်:</span>
                       <strong>{(Number(selectedWithdrawal.amount_ton) * (100 - commissionRate) / 100).toFixed(4)} TON</strong>
                     </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Wallet: <code>{selectedWithdrawal.destination_wallet}</code>
+                    </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>Wallet:</span>
+                    <code className="flex-1 truncate">{selectedWithdrawal.destination_wallet}</code>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedWithdrawal.destination_wallet);
+                        toast.success('Wallet address copied!');
+                      }}
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
                   </div>
                 </div>
               )}
