@@ -229,6 +229,7 @@ const mainMenu = () => ({
     [{ text: '📋 အမှာစာများ', callback_data: 'm:ord' }, { text: '🛍️ ကျွန်ုပ်၏လင့်များ', callback_data: 'm:mylinks' }],
     [{ text: '📜 မှတ်တမ်း', callback_data: 'm:hist' }, { text: '⭐ ကျွန်ုပ်၏အဆင့်', callback_data: 'm:rating' }],
     [{ text: '🎁 Referral', callback_data: 'm:ref' }, { text: '❓ အကူအညီ', callback_data: 'm:help' }],
+    [{ text: '📢 Official Channel', url: 'https://t.me/middleman_offical' }],
   ],
 })
 
