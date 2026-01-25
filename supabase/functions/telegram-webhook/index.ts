@@ -298,6 +298,16 @@ const ratingBtns = (txId: string, ratedId: string) => ({
   ],
 })
 
+// Delete confirmation buttons
+const deleteConfirmBtns = (msgId: number) => ({
+  inline_keyboard: [
+    [
+      { text: '✅ ဖျက်မည်', callback_data: `del:yes:${msgId}` },
+      { text: '❌ မဖျက်ပါ', callback_data: `del:no:${msgId}` },
+    ],
+  ],
+})
+
 // ==================== DATABASE ====================
 async function getProfile(telegramId: number, username?: string) {
   const { data: profile } = await supabase
@@ -798,7 +808,7 @@ async function handleRating(chatId: number, msgId: number, rating: number, txId:
   
   await answerCb(cbId, `✅ ${rating} ⭐ အဆင့်သတ်မှတ်ပြီး!`)
   
-  // Show thank you message briefly
+  // Show thank you message with delete confirmation
   await editText(chatId, msgId, `✅ *ကျေးဇူးတင်ပါသည်!*
 
 ━━━━━━━━━━━━━━━
@@ -807,11 +817,7 @@ ${'⭐'.repeat(rating)} ${rating}/5
 
 အဆင့်သတ်မှတ်ပေးသည့်အတွက် ကျေးဇူးပါ 🙏
 
-🗑️ ဤ message ၃ စက္ကန့်အတွင်း ဖျက်ပါမည်...`, undefined)
-
-  // Delete the rating message after 3 seconds
-  await new Promise(r => setTimeout(r, 3000))
-  await deleteMsg(chatId, msgId)
+🗑️ ဤ message ကို ဖျက်လိုပါသလား?`, deleteConfirmBtns(msgId))
 }
 
 // ==================== ACTION HANDLERS ====================
@@ -1525,7 +1531,7 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
 
     if (tx.seller.telegram_id) {
       // Notify seller and ask to rate buyer
-      const sellerCompleteMsgId = await sendMessage(tx.seller.telegram_id, `🎉 *ငွေရရှိပြီး!*
+      await sendMessage(tx.seller.telegram_id, `🎉 *ငွေရရှိပြီး!*
 
 ━━━━━━━━━━━━━━━
 📦 ${tx.products?.title}
@@ -1537,24 +1543,14 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
 
       // Ask seller to rate buyer
       if (tx.buyer?.id) {
-        const sellerRatingMsgId = await sendMessage(tx.seller.telegram_id, `⭐ *ဝယ်သူကို အဆင့်သတ်မှတ်ပေးပါ*
+        await sendMessage(tx.seller.telegram_id, `⭐ *ဝယ်သူကို အဆင့်သတ်မှတ်ပေးပါ*
 
 ━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
 ━━━━━━━━━━━━━━━
 
 ဝယ်သူအား ဘယ်လောက် အဆင့်ပေးမလဲ?
-သင့်အဆင့်သတ်မှတ်ချက်က အနာဂတ် ဝယ်သူများအတွက် အကူအညီဖြစ်ပါမည်
-
-⏰ ဤ message သည် ၅ မိနစ်အတွင်း အလိုအလျောက် ဖျက်ပါမည်`, ratingBtns(txId, tx.buyer.id))
-
-        // Schedule auto-delete for seller messages after 5 minutes
-        if (sellerCompleteMsgId) {
-          scheduleMessageDeletion(tx.seller.telegram_id, sellerCompleteMsgId, 5 * 60 * 1000)
-        }
-        if (sellerRatingMsgId) {
-          scheduleMessageDeletion(tx.seller.telegram_id, sellerRatingMsgId, 5 * 60 * 1000)
-        }
+သင့်အဆင့်သတ်မှတ်ချက်က အနာဂတ် ဝယ်သူများအတွက် အကူအညီဖြစ်ပါမည်`, ratingBtns(txId, tx.buyer.id))
       }
     }
   }
@@ -1565,9 +1561,8 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
   await deleteMsg(chatId, msgId)
   
   // Ask buyer to rate seller with new message
-  let buyerRatingMsgId: number | null = null
   if (tx.seller?.id) {
-    buyerRatingMsgId = await sendMessage(chatId, `🎉 *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
+    await sendMessage(chatId, `🎉 *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
 
 ╔══════════════════════════════╗
 ║                              ║
@@ -1583,44 +1578,29 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
 ⭐ *ရောင်းသူကို အဆင့်သတ်မှတ်ပေးပါ*
 
 သင့်အဆင့်သတ်မှတ်ချက်က အနာဂတ် 
-ဝယ်သူများအတွက် အကူအညီဖြစ်ပါမည်
-
-⏰ ဤ message သည် ၅ မိနစ်အတွင်း အလိုအလျောက် ဖျက်ပါမည်`, ratingBtns(txId, tx.seller.id))
+ဝယ်သူများအတွက် အကူအညီဖြစ်ပါမည်`, ratingBtns(txId, tx.seller.id))
   } else {
-    buyerRatingMsgId = await sendMessage(chatId, `✅ *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
+    await sendMessage(chatId, `✅ *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
 
 ━━━━━━━━━━━━━━━
 📦 ${tx.products?.title}
 💵 ${tx.amount_ton} TON
 ━━━━━━━━━━━━━━━
 
-ကျေးဇူးတင်ပါသည် 🙏
-
-⏰ ဤ message သည် ၅ မိနစ်အတွင်း အလိုအလျောက် ဖျက်ပါမည်`, backBtn())
+ကျေးဇူးတင်ပါသည် 🙏`, backBtn())
   }
 
-  // Schedule auto-delete for buyer's rating message after 5 minutes
-  if (buyerRatingMsgId) {
-    scheduleMessageDeletion(chatId, buyerRatingMsgId, 5 * 60 * 1000)
-  }
-
-  // Also delete the original buyer QR message if it exists
+  // Delete the original buyer QR message after user confirmation
   if (tx.buyer_msg_id && tx.buyer?.telegram_id) {
-    await deleteMsg(tx.buyer.telegram_id, tx.buyer_msg_id)
-  }
-}
+    await sendMessage(tx.buyer.telegram_id, `🗑️ *ရောင်းဝယ် message များကို ဖျက်မည်လား?*
 
-// ==================== AUTO-DELETE SCHEDULER ====================
-async function scheduleMessageDeletion(chatId: number, msgId: number, delayMs: number): Promise<void> {
-  // Note: In serverless environment, we can't use setTimeout for long delays
-  // Instead, we'll use a background task approach or immediate deletion for now
-  // For production, consider using a cron job or queue system
-  
-  // For now, we'll rely on the rating handler to delete messages after rating
-  console.log(`Scheduled deletion: chat=${chatId}, msg=${msgId}, delay=${delayMs}ms`)
-  
-  // Store in database for cron-based cleanup (optional enhancement)
-  // For now, messages will be deleted when user rates or after next ton-monitor run
+━━━━━━━━━━━━━━━
+📦 ${tx.products?.title}
+━━━━━━━━━━━━━━━
+
+ရောင်းဝယ်မှု ပြီးဆုံးပြီဖြစ်၍ 
+message များကို ဖျက်လိုပါသလား?`, deleteConfirmBtns(tx.buyer_msg_id))
+  }
 }
 
 async function handleDispute(chatId: number, msgId: number, txId: string, cbId: string, telegramId: number) {
@@ -1922,6 +1902,20 @@ async function handleCallback(cb: { id: string; from: { id: number; username?: s
   // Buy with balance callback: buy:bal:<txId>
   if (type === 'buy' && action === 'bal') {
     await handleBuyWithBalance(chatId, msgId, id, cb.id, telegramId, username)
+    return
+  }
+
+  // Delete confirmation callback: del:yes|no:<originalMsgId>
+  if (type === 'del') {
+    if (action === 'yes') {
+      await answerCb(cb.id, '🗑️ ဖျက်ပြီး!')
+      await deleteMsg(chatId, msgId)
+    } else {
+      await answerCb(cb.id, '✅ သိမ်းထားပြီး!')
+      await editText(chatId, msgId, `✅ *Message သိမ်းထားပါသည်*
+
+ဤ message ကို ဖျက်မည်မဟုတ်ပါ`, backBtn())
+    }
     return
   }
 
