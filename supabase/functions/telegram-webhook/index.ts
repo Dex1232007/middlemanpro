@@ -221,6 +221,17 @@ function generateQR(wallet: string, amount: number, comment: string): string {
 }
 
 // ==================== KEYBOARDS ====================
+// Persistent Reply Keyboard (always visible at bottom)
+const persistentKeyboard = () => ({
+  keyboard: [
+    [{ text: '📦 ရောင်းမည်' }, { text: '💰 ငွေသွင်း' }, { text: '💸 ငွေထုတ်' }],
+    [{ text: '💳 လက်ကျန်' }, { text: '📋 အမှာစာများ' }, { text: '🛍️ လင့်များ' }],
+    [{ text: '📜 မှတ်တမ်း' }, { text: '⭐ အဆင့်' }, { text: '❓ အကူအညီ' }],
+  ],
+  resize_keyboard: true,
+  is_persistent: true,
+})
+
 const mainMenu = () => ({
   inline_keyboard: [
     [{ text: '📦 ရောင်းမည်', callback_data: 'm:sell' }, { text: '💰 ငွေသွင်း', callback_data: 'm:dep' }],
@@ -413,8 +424,198 @@ async function showHome(chatId: number, msgId?: number, username?: string) {
 
   await deleteUserState(chatId)
   
-  if (msgId) await editText(chatId, msgId, text, mainMenu())
-  else await sendMessage(chatId, text, mainMenu())
+  if (msgId) {
+    await editText(chatId, msgId, text, mainMenu())
+  } else {
+    // Send with persistent keyboard for new messages
+    await sendMessage(chatId, text, { ...mainMenu(), ...persistentKeyboard() })
+  }
+}
+
+// Send message with persistent keyboard helper
+async function sendWithPersistentKeyboard(chatId: number, text: string, inlineKeyboard?: object): Promise<number | null> {
+  const keyboard = inlineKeyboard 
+    ? { ...inlineKeyboard, ...persistentKeyboard() }
+    : persistentKeyboard()
+  return sendMessage(chatId, text, keyboard)
+}
+
+// Keyboard text handlers - these send new messages instead of editing
+async function handleKeyboardOrders(chatId: number, username?: string) {
+  const profile = await getProfile(chatId, username)
+
+  const { data: sellerTxs } = await supabase
+    .from('transactions')
+    .select('*, products(*)')
+    .eq('seller_id', profile.id)
+    .in('status', ['pending_payment', 'payment_received', 'item_sent', 'disputed'])
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  const { data: buyerTxs } = await supabase
+    .from('transactions')
+    .select('*, products(*)')
+    .eq('buyer_id', profile.id)
+    .in('status', ['pending_payment', 'payment_received', 'item_sent', 'disputed'])
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  if ((!sellerTxs?.length) && (!buyerTxs?.length)) {
+    await sendWithPersistentKeyboard(chatId, `📭 *အရောင်းအဝယ် မရှိပါ*\n\nပစ္စည်းရောင်းရန် "ရောင်းမည်" နှိပ်ပါ`, backBtn())
+    return
+  }
+
+  let text = `📋 *ကျွန်ုပ်၏ အရောင်းအဝယ်များ*\n\n`
+  const btns: { text: string; callback_data: string }[][] = []
+
+  if (sellerTxs?.length) {
+    text += `━━━ 📤 *ရောင်းနေသည်* ━━━\n\n`
+    for (const tx of sellerTxs) {
+      text += `📦 *${tx.products?.title}*\n💵 ${tx.amount_ton} TON | ${statusText[tx.status]}\n\n`
+      if (tx.status === 'payment_received') {
+        btns.push([{ text: `📦 ${tx.products?.title?.substring(0, 12)} - ပို့ပြီး`, callback_data: `a:sent:${tx.id}` }])
+      }
+    }
+  }
+
+  if (buyerTxs?.length) {
+    text += `━━━ 📥 *ဝယ်နေသည်* ━━━\n\n`
+    for (const tx of buyerTxs) {
+      text += `📦 *${tx.products?.title}*\n💵 ${tx.amount_ton} TON | ${statusText[tx.status]}\n\n`
+      if (tx.status === 'item_sent') {
+        btns.push([{ text: `✅ ${tx.products?.title?.substring(0, 12)} - ရရှိပြီး`, callback_data: `a:recv:${tx.id}` }])
+      }
+    }
+  }
+
+  btns.push([{ text: '📜 မှတ်တမ်း', callback_data: 'm:hist' }])
+  btns.push([{ text: '🏠 ပင်မစာမျက်နှာ', callback_data: 'm:home' }])
+  await sendWithPersistentKeyboard(chatId, text, { inline_keyboard: btns })
+}
+
+async function handleKeyboardMyLinks(chatId: number, username?: string) {
+  const profile = await getProfile(chatId, username)
+
+  const { data: myLinks } = await supabase
+    .from('transactions')
+    .select('*, products(*)')
+    .eq('seller_id', profile.id)
+    .order('created_at', { ascending: false })
+    .limit(15)
+
+  if (!myLinks?.length) {
+    await sendWithPersistentKeyboard(chatId, `📭 *ရောင်းလင့် မရှိသေးပါ*\n\nပစ္စည်းရောင်းရန် "ရောင်းမည်" နှိပ်ပါ`, backBtn())
+    return
+  }
+
+  const { data: botSetting } = await supabase.from('settings').select('value').eq('key', 'bot_username').maybeSingle()
+  const botUsername = botSetting?.value || 'YourBot'
+
+  let text = `🛍️ *ကျွန်ုပ်၏ ရောင်းလင့်များ*\n\n`
+  const btns: { text: string; callback_data: string }[][] = []
+
+  for (const tx of myLinks) {
+    const statusIcon = statusText[tx.status] || tx.status
+    const hasBuyer = !!tx.buyer_id
+    const buyerStatus = hasBuyer ? '👤 ဝယ်သူရှိ' : '⏳ ဝယ်သူမရှိ'
+    
+    text += `📦 *${tx.products?.title}*\n`
+    text += `💵 ${tx.amount_ton} TON | ${statusIcon}\n`
+    text += `${buyerStatus}\n`
+    text += `🔗 \`https://t.me/${botUsername}?start=buy_${tx.unique_link}\`\n\n`
+
+    if (tx.status === 'pending_payment' && !hasBuyer) {
+      btns.push([{ text: `❌ ${tx.products?.title?.substring(0, 12)} - ဖျက်မည်`, callback_data: `a:cancel:${tx.id}` }])
+    } else if (tx.status === 'payment_received') {
+      btns.push([{ text: `📦 ${tx.products?.title?.substring(0, 12)} - ပို့ပြီး`, callback_data: `a:sent:${tx.id}` }])
+    }
+  }
+
+  btns.push([{ text: '🏠 ပင်မစာမျက်နှာ', callback_data: 'm:home' }])
+  await sendWithPersistentKeyboard(chatId, text, { inline_keyboard: btns })
+}
+
+async function handleKeyboardHistory(chatId: number, username?: string) {
+  const profile = await getProfile(chatId, username)
+
+  const { data: sellerTxs } = await supabase
+    .from('transactions')
+    .select('*, products(*), buyer:profiles!transactions_buyer_id_fkey(telegram_username, avg_rating, total_ratings)')
+    .eq('seller_id', profile.id)
+    .in('status', ['completed', 'cancelled'])
+    .order('created_at', { ascending: false })
+    .limit(10)
+
+  const { data: buyerTxs } = await supabase
+    .from('transactions')
+    .select('*, products(*), seller:profiles!transactions_seller_id_fkey(telegram_username, avg_rating, total_ratings)')
+    .eq('buyer_id', profile.id)
+    .in('status', ['completed', 'cancelled'])
+    .order('created_at', { ascending: false })
+    .limit(10)
+
+  if ((!sellerTxs?.length) && (!buyerTxs?.length)) {
+    await sendWithPersistentKeyboard(chatId, `📭 *မှတ်တမ်း မရှိသေးပါ*\n\nပြီးဆုံးသော အရောင်းအဝယ်များ ဤနေရာတွင် ပြပါမည်`, backBtn())
+    return
+  }
+
+  let text = `📜 *ကျွန်ုပ်၏ မှတ်တမ်း*\n\n`
+
+  if (sellerTxs?.length) {
+    text += `━━━ 📤 *ရောင်းခဲ့သည်* ━━━\n\n`
+    for (const tx of sellerTxs) {
+      const date = new Date(tx.created_at).toLocaleDateString('my-MM')
+      const statusIcon = tx.status === 'completed' ? '✅' : '❌'
+      const buyerRating = tx.buyer?.avg_rating ? ` ⭐${tx.buyer.avg_rating}` : ''
+      text += `${statusIcon} *${tx.products?.title}*\n💵 ${tx.amount_ton} TON | ${date}${buyerRating}\n\n`
+    }
+  }
+
+  if (buyerTxs?.length) {
+    text += `━━━ 📥 *ဝယ်ခဲ့သည်* ━━━\n\n`
+    for (const tx of buyerTxs) {
+      const date = new Date(tx.created_at).toLocaleDateString('my-MM')
+      const statusIcon = tx.status === 'completed' ? '✅' : '❌'
+      const sellerRating = tx.seller?.avg_rating ? ` ⭐${tx.seller.avg_rating}` : ''
+      text += `${statusIcon} *${tx.products?.title}*\n💵 ${tx.amount_ton} TON | ${date}${sellerRating}\n\n`
+    }
+  }
+
+  await sendWithPersistentKeyboard(chatId, text, backBtn())
+}
+
+async function handleKeyboardRating(chatId: number, username?: string) {
+  const profile = await getProfile(chatId, username)
+  
+  const avgRating = Number(profile.avg_rating) || 0
+  const totalRatings = Number(profile.total_ratings) || 0
+  
+  const { data: recentRatings } = await supabase
+    .from('ratings')
+    .select('rating, comment, created_at, rater:profiles!ratings_rater_id_fkey(telegram_username)')
+    .eq('rated_id', profile.id)
+    .order('created_at', { ascending: false })
+    .limit(5)
+  
+  let text = `⭐ *ကျွန်ုပ်၏ အဆင့်သတ်မှတ်ချက်*
+
+━━━━━━━━━━━━━━━
+⭐ ပျမ်းမျှ: *${avgRating.toFixed(1)} / 5.0*
+📊 စုစုပေါင်း: *${totalRatings}* ခု
+━━━━━━━━━━━━━━━`
+
+  if (recentRatings?.length) {
+    text += `\n\n*မကြာမီက ရရှိသော အဆင့်များ:*\n`
+    for (const r of recentRatings) {
+      const stars = '⭐'.repeat(r.rating)
+      const raterData = Array.isArray(r.rater) ? r.rater[0] : r.rater
+      const rater = raterData?.telegram_username ? `@${raterData.telegram_username}` : 'User'
+      text += `\n${stars} - ${rater}`
+      if (r.comment) text += `\n💬 "${r.comment}"`
+    }
+  }
+
+  await sendWithPersistentKeyboard(chatId, text, backBtn())
 }
 
 async function showHelp(chatId: number, msgId: number) {
@@ -1902,6 +2103,52 @@ async function handleMessage(msg: { chat: { id: number }; from?: { username?: st
   if (text.startsWith('/')) {
     await showHome(chatId, undefined, username)
     await deleteUserState(chatId)
+    return
+  }
+
+  // Handle persistent keyboard text buttons
+  const keyboardActions: Record<string, () => Promise<void>> = {
+    '📦 ရောင်းမည်': async () => {
+      const msgId = await sendWithPersistentKeyboard(chatId, '📦 *ပစ္စည်းရောင်းရန်*\n\n📝 *အဆင့် ၁/၂*\nပစ္စည်းအမည် ထည့်ပါ:\n\nဥပမာ: `iPhone 15 Pro Max`', cancelBtn())
+      if (msgId) await setUserState(chatId, { action: 'sell_title', msgId })
+    },
+    '💰 ငွေသွင်း': async () => {
+      await sendWithPersistentKeyboard(chatId, '💰 *ငွေသွင်းရန်*\n\nပမာဏရွေးပါ:', depositAmounts())
+    },
+    '💸 ငွေထုတ်': async () => {
+      const profile = await getProfile(chatId, username)
+      const balance = Number(profile.balance)
+      if (balance <= 0) {
+        await sendWithPersistentKeyboard(chatId, `❌ *လက်ကျန်ငွေ မရှိပါ*\n\n💳 လက်ကျန်: *0.00 TON*\n\nအရင်ငွေသွင်းပါ`, backBtn())
+        return
+      }
+      await sendWithPersistentKeyboard(chatId, `💸 *ငွေထုတ်ယူရန်*\n\n💳 လက်ကျန်: *${balance.toFixed(2)} TON*\n\nပမာဏရွေးပါ:`, withdrawAmounts(balance))
+    },
+    '💳 လက်ကျန်': async () => {
+      const profile = await getProfile(chatId, username)
+      await sendWithPersistentKeyboard(chatId, `💰 *လက်ကျန်ငွေ*\n\n━━━━━━━━━━━━━━━\n💳 *${Number(profile.balance).toFixed(2)} TON*\n━━━━━━━━━━━━━━━\n\n📥 ငွေသွင်း - QR Scan ပြီး Auto Credit\n📤 ငွေထုတ် - Wallet ထည့်ပြီး Auto Send`, backBtn())
+    },
+    '📋 အမှာစာများ': async () => {
+      await handleKeyboardOrders(chatId, username)
+    },
+    '🛍️ လင့်များ': async () => {
+      await handleKeyboardMyLinks(chatId, username)
+    },
+    '📜 မှတ်တမ်း': async () => {
+      await handleKeyboardHistory(chatId, username)
+    },
+    '⭐ အဆင့်': async () => {
+      await handleKeyboardRating(chatId, username)
+    },
+    '❓ အကူအညီ': async () => {
+      await sendWithPersistentKeyboard(chatId, `📖 *အကူအညီ*\n\n━━━━━━━━━━━━━━━\n*🏪 ရောင်းသူ:*\n1️⃣ "ရောင်းမည်" > ပစ္စည်းအမည် | ဈေး\n2️⃣ Link ကို ဝယ်သူထံပေး\n3️⃣ ငွေရရှိပြီး > "ပို့ပြီး" နှိပ်\n4️⃣ ဝယ်သူအတည်ပြု > ငွေရ\n\n*🛒 ဝယ်သူ:*\n1️⃣ Link ဖွင့် > QR Scan\n2️⃣ TON ပေးချေ (Auto Detect)\n3️⃣ ပစ္စည်းရ > "ရရှိပြီး" နှိပ်\n\n*💰 ငွေသွင်း:* QR Scan > Auto Credit\n*💸 ငွေထုတ်:* ပမာဏရွေး > Auto Send\n━━━━━━━━━━━━━━━\n⚠️ ပစ္စည်းမရမီ "ရရှိပြီး" မနှိပ်ပါ!`, backBtn())
+    },
+  }
+
+  const keyboardAction = keyboardActions[text]
+  if (keyboardAction) {
+    await deleteUserState(chatId)
+    await keyboardAction()
     return
   }
 
