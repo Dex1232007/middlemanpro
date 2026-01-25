@@ -1666,34 +1666,43 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
 
   await answerCb(cbId, '✅ အတည်ပြုပြီး!')
   
-  // Edit existing message instead of delete + send new (to avoid spam)
-  if (tx.seller?.id) {
-    await editText(chatId, msgId, `🎉 *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
+  // Prepare success message for buyer with rating prompt
+  const successMsg = tx.seller?.id ? `🎉 *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
 
 ╔══════════════════════════════╗
-║                              ║
-║      ✅ *SUCCESS*            ║
-║                              ║
+║      ✅ *COMPLETED*          ║
 ╚══════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
 💵 *${tx.amount_ton} TON*
+🏷️ ကော်မရှင်: ${tx.commission_ton} TON
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⭐ *ရောင်းသူကို အဆင့်သတ်မှတ်ပေးပါ*
 
-သင့်အဆင့်သတ်မှတ်ချက်က အနာဂတ် 
-ဝယ်သူများအတွက် အကူအညီဖြစ်ပါမည်`, ratingBtns(txId, tx.seller.id))
-  } else {
-    await editText(chatId, msgId, `✅ *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
+သင့်အဆင့်သတ်မှတ်ချက်က အခြားသူများအတွက် 
+အကူအညီဖြစ်ပါမည်` : `✅ *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
 
 ━━━━━━━━━━━━━━━
 📦 ${tx.products?.title}
 💵 ${tx.amount_ton} TON
 ━━━━━━━━━━━━━━━
 
-ကျေးဇူးတင်ပါသည် 🙏`, backBtn())
+ကျေးဇူးတင်ပါသည် 🙏`
+
+  const successBtns = tx.seller?.id ? ratingBtns(txId, tx.seller.id) : backBtn()
+
+  // Try editText first, if fails (photo message), try alternatives
+  const textEdited = await editText(chatId, msgId, successMsg, successBtns)
+  if (!textEdited) {
+    // Message might be a photo, try to edit as media with success image
+    const successQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('SUCCESS')}&bgcolor=4CAF50`
+    const mediaEdited = await editMediaWithPhoto(chatId, msgId, successQR, successMsg, successBtns)
+    if (!mediaEdited) {
+      // If both fail, send new message
+      await sendMessage(chatId, successMsg, successBtns)
+    }
   }
 }
 
