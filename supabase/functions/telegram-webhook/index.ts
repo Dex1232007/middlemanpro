@@ -1475,6 +1475,19 @@ async function handleBuyWithBalance(chatId: number, msgId: number, txId: string,
 }
 
 // ==================== TRANSACTION ACTIONS ====================
+// Helper to get status reason
+function getStatusReason(status: string): string {
+  switch (status) {
+    case 'pending_payment': return 'ငွေမပေးချေရသေးပါ'
+    case 'payment_received': return 'ငွေပေးချေပြီးပါပြီ၊ ပစ္စည်းပို့ရန် စောင့်နေပါသည်'
+    case 'item_sent': return 'ပစ္စည်းပို့ပြီးပါပြီ၊ ဝယ်သူ အတည်ပြုရန် စောင့်နေပါသည်'
+    case 'completed': return 'အရောင်းအဝယ် ပြီးဆုံးပြီးပါပြီ'
+    case 'cancelled': return 'ပယ်ဖျက်ထားပြီးပါပြီ'
+    case 'disputed': return 'အငြင်းပွားမှု ရှိနေပါသည်'
+    default: return 'လုပ်ဆောင်၍ မရပါ'
+  }
+}
+
 async function handleItemSent(chatId: number, msgId: number, txId: string, cbId: string, telegramId: number) {
   const { data: tx } = await supabase
     .from('transactions')
@@ -1482,9 +1495,22 @@ async function handleItemSent(chatId: number, msgId: number, txId: string, cbId:
     .eq('id', txId)
     .single()
 
-  if (!tx) { await answerCb(cbId, '❌ ရှာမတွေ့ပါ', true); return }
-  if (tx.seller?.telegram_id !== telegramId) { await answerCb(cbId, '❌ ရောင်းသူမဟုတ်ပါ', true); return }
-  if (tx.status !== 'payment_received') { await answerCb(cbId, '❌ ပြင်ဆင်၍မရပါ', true); return }
+  if (!tx) { 
+    await answerCb(cbId, '❌ ရောင်းဝယ်မှု ရှာမတွေ့ပါ', true)
+    return 
+  }
+  if (!tx.products) {
+    await answerCb(cbId, '❌ ပစ္စည်း ရှာမတွေ့ပါ (ဖျက်ထားပြီးဖြစ်နိုင်ပါသည်)', true)
+    return
+  }
+  if (tx.seller?.telegram_id !== telegramId) { 
+    await answerCb(cbId, '❌ သင်သည် ဤရောင်းဝယ်မှု၏ ရောင်းသူမဟုတ်ပါ', true)
+    return 
+  }
+  if (tx.status !== 'payment_received') { 
+    await answerCb(cbId, `❌ ${getStatusReason(tx.status)}`, true)
+    return 
+  }
 
   await supabase.from('transactions').update({ status: 'item_sent', item_sent_at: new Date().toISOString() }).eq('id', txId)
   await answerCb(cbId, '✅ မှတ်တမ်းတင်ပြီး!')
@@ -1508,7 +1534,9 @@ async function handleItemSent(chatId: number, msgId: number, txId: string, cbId:
       ? `@${tx.seller.telegram_username}` 
       : `ID: ${tx.seller?.telegram_id || 'Unknown'}`
     
-    await sendMessage(tx.buyer.telegram_id, `📦 *ပစ္စည်းပို့ပြီး!*
+    // Edit existing buyer message if available, otherwise send new
+    if (tx.buyer_msg_id) {
+      await editText(tx.buyer.telegram_id, tx.buyer_msg_id, `📦 *ပစ္စည်းပို့ပြီး!*
 
 ━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
@@ -1518,6 +1546,18 @@ async function handleItemSent(chatId: number, msgId: number, txId: string, cbId:
 ပစ္စည်းရရှိပါက "ရရှိပြီး" နှိပ်ပါ
 
 ⚠️ မရရှိမီ မနှိပ်ပါ!`, buyerBtns(txId, tx.seller?.telegram_username))
+    } else {
+      await sendMessage(tx.buyer.telegram_id, `📦 *ပစ္စည်းပို့ပြီး!*
+
+━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+🏪 ရောင်းသူ: ${sellerUsername}
+━━━━━━━━━━━━━━━
+
+ပစ္စည်းရရှိပါက "ရရှိပြီး" နှိပ်ပါ
+
+⚠️ မရရှိမီ မနှိပ်ပါ!`, buyerBtns(txId, tx.seller?.telegram_username))
+    }
   }
 }
 
@@ -1528,9 +1568,22 @@ async function handleItemReceived(chatId: number, msgId: number, txId: string, c
     .eq('id', txId)
     .single()
 
-  if (!tx) { await answerCb(cbId, '❌ ရှာမတွေ့ပါ', true); return }
-  if (tx.buyer?.telegram_id !== telegramId) { await answerCb(cbId, '❌ ဝယ်သူမဟုတ်ပါ', true); return }
-  if (tx.status !== 'item_sent') { await answerCb(cbId, '❌ ပြင်ဆင်၍မရပါ', true); return }
+  if (!tx) { 
+    await answerCb(cbId, '❌ ရောင်းဝယ်မှု ရှာမတွေ့ပါ', true)
+    return 
+  }
+  if (!tx.products) {
+    await answerCb(cbId, '❌ ပစ္စည်း ရှာမတွေ့ပါ (ဖျက်ထားပြီးဖြစ်နိုင်ပါသည်)', true)
+    return
+  }
+  if (tx.buyer?.telegram_id !== telegramId) { 
+    await answerCb(cbId, '❌ သင်သည် ဤရောင်းဝယ်မှု၏ ဝယ်သူမဟုတ်ပါ', true)
+    return 
+  }
+  if (tx.status !== 'item_sent') { 
+    await answerCb(cbId, `❌ ${getStatusReason(tx.status)}`, true)
+    return 
+  }
 
   await answerCb(cbId)
   await editText(chatId, msgId, `⚠️ *အတည်ပြုရန်*
@@ -1552,7 +1605,18 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
     .eq('id', txId)
     .single()
 
-  if (!tx || tx.status !== 'item_sent') { await answerCb(cbId, '❌ ပြင်ဆင်၍မရပါ', true); return }
+  if (!tx) { 
+    await answerCb(cbId, '❌ ရောင်းဝယ်မှု ရှာမတွေ့ပါ', true)
+    return 
+  }
+  if (!tx.products) {
+    await answerCb(cbId, '❌ ပစ္စည်း ရှာမတွေ့ပါ (ဖျက်ထားပြီးဖြစ်နိုင်ပါသည်)', true)
+    return
+  }
+  if (tx.status !== 'item_sent') { 
+    await answerCb(cbId, `❌ ${getStatusReason(tx.status)}`, true)
+    return 
+  }
 
   await supabase.from('transactions').update({ status: 'completed', confirmed_at: new Date().toISOString() }).eq('id', txId)
 
@@ -1589,12 +1653,9 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
 
   await answerCb(cbId, '✅ အတည်ပြုပြီး!')
   
-  // Delete old message (could be photo/text)
-  await deleteMsg(chatId, msgId)
-  
-  // Ask buyer to rate seller with new message
+  // Edit existing message instead of delete + send new (to avoid spam)
   if (tx.seller?.id) {
-    await sendMessage(chatId, `🎉 *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
+    await editText(chatId, msgId, `🎉 *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
 
 ╔══════════════════════════════╗
 ║                              ║
@@ -1612,7 +1673,7 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
 သင့်အဆင့်သတ်မှတ်ချက်က အနာဂတ် 
 ဝယ်သူများအတွက် အကူအညီဖြစ်ပါမည်`, ratingBtns(txId, tx.seller.id))
   } else {
-    await sendMessage(chatId, `✅ *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
+    await editText(chatId, msgId, `✅ *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
 
 ━━━━━━━━━━━━━━━
 📦 ${tx.products?.title}
@@ -1620,18 +1681,6 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
 ━━━━━━━━━━━━━━━
 
 ကျေးဇူးတင်ပါသည် 🙏`, backBtn())
-  }
-
-  // Delete the original buyer QR message after user confirmation
-  if (tx.buyer_msg_id && tx.buyer?.telegram_id) {
-    await sendMessage(tx.buyer.telegram_id, `🗑️ *ရောင်းဝယ် message များကို ဖျက်မည်လား?*
-
-━━━━━━━━━━━━━━━
-📦 ${tx.products?.title}
-━━━━━━━━━━━━━━━
-
-ရောင်းဝယ်မှု ပြီးဆုံးပြီဖြစ်၍ 
-message များကို ဖျက်လိုပါသလား?`, deleteConfirmBtns(tx.buyer_msg_id))
   }
 }
 
@@ -1642,8 +1691,30 @@ async function handleDispute(chatId: number, msgId: number, txId: string, cbId: 
     .eq('id', txId)
     .single()
 
-  if (!tx) { await answerCb(cbId, '❌ ရှာမတွေ့', true); return }
-  if (tx.buyer?.telegram_id !== telegramId) { await answerCb(cbId, '❌ ဝယ်သူမဟုတ်', true); return }
+  if (!tx) { 
+    await answerCb(cbId, '❌ ရောင်းဝယ်မှု ရှာမတွေ့ပါ', true)
+    return 
+  }
+  if (!tx.products) {
+    await answerCb(cbId, '❌ ပစ္စည်း ရှာမတွေ့ပါ (ဖျက်ထားပြီးဖြစ်နိုင်ပါသည်)', true)
+    return
+  }
+  if (tx.buyer?.telegram_id !== telegramId) { 
+    await answerCb(cbId, '❌ သင်သည် ဤရောင်းဝယ်မှု၏ ဝယ်သူမဟုတ်ပါ', true)
+    return 
+  }
+  if (tx.status === 'completed') {
+    await answerCb(cbId, '❌ အရောင်းအဝယ် ပြီးဆုံးပြီးပါပြီ', true)
+    return
+  }
+  if (tx.status === 'cancelled') {
+    await answerCb(cbId, '❌ ပယ်ဖျက်ထားပြီးပါပြီ', true)
+    return
+  }
+  if (tx.status === 'disputed') {
+    await answerCb(cbId, '❌ အငြင်းပွားမှု တင်ပြီးပါပြီ', true)
+    return
+  }
 
   await supabase.from('transactions').update({ status: 'disputed' }).eq('id', txId)
   await answerCb(cbId, '⚠️ အငြင်းပွားမှု တင်ပြီး', true)
@@ -1683,9 +1754,34 @@ async function handleCancelTx(chatId: number, msgId: number, txId: string, cbId:
     .eq('id', txId)
     .single()
 
-  if (!tx) { await answerCb(cbId, '❌ ရှာမတွေ့', true); return }
-  if (tx.seller?.telegram_id !== telegramId) { await answerCb(cbId, '❌ ရောင်းသူမဟုတ်', true); return }
-  if (!['pending_payment', 'payment_received'].includes(tx.status)) { await answerCb(cbId, '❌ ပယ်ဖျက်၍မရ', true); return }
+  if (!tx) { 
+    await answerCb(cbId, '❌ ရောင်းဝယ်မှု ရှာမတွေ့ပါ', true)
+    return 
+  }
+  if (!tx.products) {
+    await answerCb(cbId, '❌ ပစ္စည်း ရှာမတွေ့ပါ (ဖျက်ထားပြီးဖြစ်နိုင်ပါသည်)', true)
+    return
+  }
+  if (tx.seller?.telegram_id !== telegramId) { 
+    await answerCb(cbId, '❌ သင်သည် ဤရောင်းဝယ်မှု၏ ရောင်းသူမဟုတ်ပါ', true)
+    return 
+  }
+  if (tx.status === 'completed') {
+    await answerCb(cbId, '❌ အရောင်းအဝယ် ပြီးဆုံးပြီးပါပြီ', true)
+    return
+  }
+  if (tx.status === 'cancelled') {
+    await answerCb(cbId, '❌ ပယ်ဖျက်ထားပြီးပါပြီ', true)
+    return
+  }
+  if (tx.status === 'item_sent') {
+    await answerCb(cbId, '❌ ပစ္စည်းပို့ပြီးပါပြီ၊ ပယ်ဖျက်၍မရပါ', true)
+    return
+  }
+  if (tx.status === 'disputed') {
+    await answerCb(cbId, '❌ အငြင်းပွားမှု ရှိနေပါသည်', true)
+    return
+  }
 
   await supabase.from('transactions').update({ status: 'cancelled' }).eq('id', txId)
   await answerCb(cbId, '❌ ပယ်ဖျက်ပြီး!')
