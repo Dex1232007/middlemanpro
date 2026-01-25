@@ -1365,6 +1365,31 @@ async function handleBuyWithBalance(chatId: number, msgId: number, txId: string,
 💬 ဝယ်သူနဲ့ chat လုပ်ပြီး ပစ္စည်းပို့ပါ
 ပစ္စည်းပို့ပြီးပါက "ပို့ပြီး" နှိပ်ပါ`, sellerBtns(tx.id))
   }
+
+  // Notify admin for high-value transactions (>= 50 TON)
+  const HIGH_VALUE_THRESHOLD = 50
+  if (amount >= HIGH_VALUE_THRESHOLD) {
+    try {
+      await fetch(`${SUPABASE_URL}/functions/v1/notify-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+        },
+        body: JSON.stringify({
+          type: 'admin_high_value_tx',
+          amount: amount,
+          product_title: tx.products?.title,
+          buyer_username: profile.telegram_username,
+          seller_username: tx.seller?.telegram_username,
+          tx_hash: `balance_${Date.now()}`
+        })
+      })
+      console.log(`Admin notified about high-value balance purchase: ${amount} TON`)
+    } catch (e) {
+      console.error('Failed to notify admin about high-value tx:', e)
+    }
+  }
 }
 
 // ==================== TRANSACTION ACTIONS ====================
