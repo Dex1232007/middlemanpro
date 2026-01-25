@@ -794,13 +794,13 @@ async function handleRating(chatId: number, msgId: number, rating: number, txId:
     return
   }
   
-  // Insert rating
-  const { error } = await supabase.from('ratings').insert({
+  // Insert rating (without comment first)
+  const { data: insertedRating, error } = await supabase.from('ratings').insert({
     transaction_id: txId,
     rater_id: profile.id,
     rated_id: ratedId,
     rating: rating,
-  })
+  }).select('id').single()
   
   if (error) {
     console.error('Rating error:', error)
@@ -810,16 +810,49 @@ async function handleRating(chatId: number, msgId: number, rating: number, txId:
   
   await answerCb(cbId, `✅ ${rating} ⭐ အဆင့်သတ်မှတ်ပြီး!`)
   
-  // Show thank you message with delete confirmation
-  await editText(chatId, msgId, `✅ *ကျေးဇူးတင်ပါသည်!*
+  // Ask for optional comment
+  await setUserState(chatId, { action: 'rating_comment', msgId, data: { ratingId: insertedRating.id, rating } })
+  
+  await editText(chatId, msgId, `✅ *${rating} ⭐ အဆင့်သတ်မှတ်ပြီး!*
 
 ━━━━━━━━━━━━━━━
 ${'⭐'.repeat(rating)} ${rating}/5
 ━━━━━━━━━━━━━━━
 
-အဆင့်သတ်မှတ်ပေးသည့်အတွက် ကျေးဇူးပါ 🙏
+📝 *Feedback/Comment ရေးမည်လား?*
 
-🗑️ ဤ message ကို ဖျက်လိုပါသလား?`, deleteConfirmBtns(msgId))
+ထပ်ပြောချင်တာရှိရင် အောက်မှာ ရိုက်ထည့်ပါ
+(သို့) "ကျော်မည်" နှိပ်ပါ`, skipCommentBtn())
+}
+
+// Skip comment button
+const skipCommentBtn = () => ({
+  inline_keyboard: [
+    [{ text: '⏭️ ကျော်မည်', callback_data: 'skip_comment' }],
+  ],
+})
+
+// Handle rating comment input
+async function handleRatingComment(chatId: number, comment: string, msgId: number, ratingId: string, rating: number) {
+  const safeComment = comment.substring(0, 500).trim()
+  
+  if (safeComment) {
+    await supabase
+      .from('ratings')
+      .update({ comment: safeComment })
+      .eq('id', ratingId)
+  }
+  
+  await deleteUserState(chatId)
+  
+  await editText(chatId, msgId, `✅ *ကျေးဇူးတင်ပါသည်!*
+
+━━━━━━━━━━━━━━━
+${'⭐'.repeat(rating)} ${rating}/5
+${safeComment ? `💬 "${safeComment}"` : ''}
+━━━━━━━━━━━━━━━
+
+အဆင့်သတ်မှတ်ပေးသည့်အတွက် ကျေးဇူးပါ 🙏`, backBtn())
 }
 
 // ==================== ACTION HANDLERS ====================
@@ -1780,6 +1813,15 @@ async function handleMessage(msg: { chat: { id: number }; from?: { username?: st
     }
   }
 
+  // Rating comment input
+  if (state?.action === 'rating_comment' && state.msgId && state.data?.ratingId) {
+    const ratingId = String(state.data.ratingId)
+    const ratingNum = Number(state.data.rating) || 5
+    await handleRatingComment(chatId, text, state.msgId, ratingId, ratingNum)
+    await deleteMsg(chatId, inMsgId)
+    return
+  }
+
   await showHome(chatId, undefined, username)
 }
 
@@ -1914,6 +1956,26 @@ async function handleCallback(cb: { id: string; from: { id: number; username?: s
       await editText(chatId, msgId, `✅ *Message သိမ်းထားပါသည်*
 
 ဤ message ကို ဖျက်မည်မဟုတ်ပါ`, backBtn())
+    }
+    return
+  }
+
+  // Skip comment callback
+  if (data === 'skip_comment') {
+    const state = await getUserState(chatId)
+    if (state?.action === 'rating_comment' && state.data?.rating) {
+      await deleteUserState(chatId)
+      const rating = Number(state.data.rating)
+      await answerCb(cb.id, '✅ ကျော်လိုက်ပြီး!')
+      await editText(chatId, msgId, `✅ *ကျေးဇူးတင်ပါသည်!*
+
+━━━━━━━━━━━━━━━
+${'⭐'.repeat(rating)} ${rating}/5
+━━━━━━━━━━━━━━━
+
+အဆင့်သတ်မှတ်ပေးသည့်အတွက် ကျေးဇူးပါ 🙏`, backBtn())
+    } else {
+      await answerCb(cb.id)
     }
     return
   }
