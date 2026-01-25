@@ -502,31 +502,22 @@ async function showDepositQR(chatId: number, msgId: number, amount: number, user
   // Enhanced QR display with better visual formatting
   const qrMsgId = await sendPhoto(chatId, qr, `💰 *ငွေသွင်း - ${amount} TON*
 
-╔══════════════════════════════╗
-║     📱 QR Scan ပြုလုပ်ပါ      ║
-╚══════════════════════════════╝
+━━━━━━━━━━━━━━━
+📱 QR Scan သို့မဟုတ် အောက်တွင်ပါရှိသော Address သို့ ငွေလွဲပါ။
 
-━━━━━━━━━━━━━━━━━━━━━━━━━
-
-💳 *Wallet Address:*
-\`${adminWallet}\`
+💳 \`${adminWallet}\`
 
 💵 *ပမာဏ:* ${amount} TON
 
-🔐 *Memo (မဖြစ်မနေထည့်ပါ):*
+🔐 *Comment တွင် Memo စာသား ကူးထည့်ပေးပါ:*
 \`${comment}\`
 
-━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━
 🔑 ID: \`${uniqueCode}\`
-⏰ သက်တမ်း: ၃၀ မိနစ်
-━━━━━━━━━━━━━━━━━━━━━━━━━
-
-⚠️ *အရေးကြီး:* Memo မပါရင် ငွေထည့်မရပါ!
-
-⏳ ငွေပေးချေပြီးပါက အလိုအလျောက်
-   Balance ထဲသို့ ထည့်သွင်းပေးပါမည်...
-
-🔔 *Real-time* အတည်ပြုပေးပါမည်`, backBtn())
+⚠️ *Memo မပါရင် ငွေထည့်မရပါ!*
+💫 ငွေလွဲပြီး Transaction Confirm ဖြစ်သည်နှင့် အလိုအလျောက် Balance ထဲသို့ ထည့်သွင်းပေးပါမည်။
+⏰ သက်တမ်း: *၃၀ မိနစ်အတွင်း* ငွေပို့ပါ
+━━━━━━━━━━━━━━━`, backBtn())
   
   // Save pending deposit with unique code, expiry, and message ID for live updates
   await supabase.from('deposits').insert({
