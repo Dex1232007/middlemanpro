@@ -145,8 +145,8 @@ async function sendPhoto(chatId: number, photoUrl: string, caption: string, keyb
   }
 }
 
-// Edit message with new photo using editMessageMedia
-async function editMediaWithPhoto(chatId: number, msgId: number, photoUrl: string, caption: string, keyboard?: object): Promise<boolean> {
+// Edit message media (photo) using Telegram's editMessageMedia API
+async function editMessageMedia(chatId: number, msgId: number, photoUrl: string, caption: string, keyboard?: object): Promise<boolean> {
   try {
     const body: Record<string, unknown> = {
       chat_id: chatId,
@@ -1381,7 +1381,7 @@ async function handleBuyWithBalance(chatId: number, msgId: number, txId: string,
 
   // Step 1: Show processing animation
   const processingQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('PROCESSING...')}&bgcolor=FFF9C4`
-  await editMediaWithPhoto(chatId, msgId, processingQR, `⏳ *ငွေပေးချေနေသည်...*
+  await editMessageMedia(chatId, msgId, processingQR, `⏳ *ငွေပေးချေနေသည်...*
 
 ━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
@@ -1404,7 +1404,7 @@ async function handleBuyWithBalance(chatId: number, msgId: number, txId: string,
 
   // Step 2: Show success with celebration
   const successQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('PAID!')}&bgcolor=90EE90`
-  await editMediaWithPhoto(chatId, msgId, successQR, `🎉 *Balance ဖြင့် ဝယ်ယူပြီး!*
+  await editMessageMedia(chatId, msgId, successQR, `🎉 *Balance ဖြင့် ဝယ်ယူပြီး!*
 
 ╔══════════════════════════════╗
 ║                              ║
@@ -1603,7 +1603,7 @@ async function handleItemReceived(chatId: number, msgId: number, txId: string, c
   if (!textEdited) {
     // Message might be a photo, try to edit as media
     const confirmQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('CONFIRM?')}&bgcolor=FFEB3B`
-    const mediaEdited = await editMediaWithPhoto(chatId, msgId, confirmQR, confirmText, confirmBtns(txId))
+    const mediaEdited = await editMessageMedia(chatId, msgId, confirmQR, confirmText, confirmBtns(txId))
     if (!mediaEdited) {
       // If both fail, send new message
       await sendMessage(chatId, confirmText, confirmBtns(txId))
@@ -1698,7 +1698,7 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
   if (!textEdited) {
     // Message might be a photo, try to edit as media with success image
     const successQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('SUCCESS')}&bgcolor=4CAF50`
-    const mediaEdited = await editMediaWithPhoto(chatId, msgId, successQR, successMsg, successBtns)
+    const mediaEdited = await editMessageMedia(chatId, msgId, successQR, successMsg, successBtns)
     if (!mediaEdited) {
       // If both fail, send new message
       await sendMessage(chatId, successMsg, successBtns)
