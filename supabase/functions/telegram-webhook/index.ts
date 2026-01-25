@@ -254,15 +254,17 @@ const withdrawAmounts = (balance: number) => {
   return { inline_keyboard: rows }
 }
 
-const sellerBtns = (txId: string) => ({
+const sellerBtns = (txId: string, buyerUsername?: string) => ({
   inline_keyboard: [
     [{ text: '📦 ပို့ပြီး', callback_data: `a:sent:${txId}` }, { text: '❌ ပယ်ဖျက်', callback_data: `a:cancel:${txId}` }],
+    ...(buyerUsername ? [[{ text: '💬 ဝယ်သူနဲ့ Chat', url: `https://t.me/${buyerUsername}` }]] : []),
   ],
 })
 
-const buyerBtns = (txId: string) => ({
+const buyerBtns = (txId: string, sellerUsername?: string) => ({
   inline_keyboard: [
     [{ text: '✅ ရရှိပြီး', callback_data: `a:recv:${txId}` }, { text: '⚠️ အငြင်းပွား', callback_data: `a:disp:${txId}` }],
+    ...(sellerUsername ? [[{ text: '💬 ရောင်းသူနဲ့ Chat', url: `https://t.me/${sellerUsername}` }]] : []),
   ],
 })
 
@@ -1385,9 +1387,7 @@ async function handleBuyWithBalance(chatId: number, msgId: number, txId: string,
 💳 လက်ကျန်: *${newBuyerBalance.toFixed(2)} TON*
 
 ⏳ ရောင်းသူမှ ပစ္စည်းပို့ပေးပါမည်
-💬 ရောင်းသူနဲ့ chat လုပ်ပါ
-
-⚠️ *သတိ:* ပစ္စည်းမရမီ "ရရှိပြီး" မနှိပ်ပါ!`, buyerBtns(tx.id))
+⚠️ *သတိ:* ပစ္စည်းမရမီ "ရရှိပြီး" မနှိပ်ပါ!`, buyerBtns(tx.id, tx.seller?.telegram_username))
 
   // Notify seller
   if (tx.seller?.telegram_id) {
@@ -1412,8 +1412,7 @@ async function handleBuyWithBalance(chatId: number, msgId: number, txId: string,
 
 ✅ ဝယ်သူမှ Balance ဖြင့် ငွေပေးချေပြီးပါပြီ
 
-💬 ဝယ်သူနဲ့ chat လုပ်ပြီး ပစ္စည်းပို့ပါ
-📦 ပစ္စည်းပို့ပြီးပါက "ပို့ပြီး" နှိပ်ပါ`, sellerBtns(tx.id))
+📦 ပစ္စည်းပို့ပြီးပါက "ပို့ပြီး" နှိပ်ပါ`, sellerBtns(tx.id, profile.telegram_username))
   }
 
   // Notify admin for high-value transactions (>= 50 TON)
@@ -1485,7 +1484,7 @@ async function handleItemSent(chatId: number, msgId: number, txId: string, cbId:
 
 ပစ္စည်းရရှိပါက "ရရှိပြီး" နှိပ်ပါ
 
-⚠️ မရရှိမီ မနှိပ်ပါ!`, buyerBtns(txId))
+⚠️ မရရှိမီ မနှိပ်ပါ!`, buyerBtns(txId, tx.seller?.telegram_username))
   }
 }
 
