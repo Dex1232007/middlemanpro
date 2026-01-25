@@ -1531,30 +1531,47 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
       if (tx.buyer?.id) {
         await sendMessage(tx.seller.telegram_id, `⭐ *ဝယ်သူကို အဆင့်သတ်မှတ်ပေးပါ*
 
-📦 ${tx.products?.title}
+━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+━━━━━━━━━━━━━━━
 
-ဝယ်သူအား ဘယ်လောက် အဆင့်ပေးမလဲ?`, ratingBtns(txId, tx.buyer.id))
+ဝယ်သူအား ဘယ်လောက် အဆင့်ပေးမလဲ?
+သင့်အဆင့်သတ်မှတ်ချက်က အနာဂတ် ဝယ်သူများအတွက် အကူအညီဖြစ်ပါမည်`, ratingBtns(txId, tx.buyer.id))
       }
     }
   }
 
   await answerCb(cbId, '✅ အတည်ပြုပြီး!')
   
-  // Ask buyer to rate seller
+  // Delete old message (could be photo/text) and send fresh rating prompt
+  await deleteMsg(chatId, msgId)
+  
+  // Ask buyer to rate seller with new message
   if (tx.seller?.id) {
-    await editText(chatId, msgId, `✅ *အရောင်းအဝယ် ပြီးဆုံး!*
+    await sendMessage(chatId, `🎉 *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
 
-━━━━━━━━━━━━━━━
-📦 ${tx.products?.title}
-💵 ${tx.amount_ton} TON
-━━━━━━━━━━━━━━━
+╔══════════════════════════════╗
+║                              ║
+║      ✅ *SUCCESS*            ║
+║                              ║
+╚══════════════════════════════╝
 
-⭐ *ရောင်းသူကို အဆင့်သတ်မှတ်ပေးပါ*`, ratingBtns(txId, tx.seller.id))
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+💵 *${tx.amount_ton} TON*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⭐ *ရောင်းသူကို အဆင့်သတ်မှတ်ပေးပါ*
+
+သင့်အဆင့်သတ်မှတ်ချက်က အနာဂတ် 
+ဝယ်သူများအတွက် အကူအညီဖြစ်ပါမည်`, ratingBtns(txId, tx.seller.id))
   } else {
-    await editText(chatId, msgId, `✅ *အရောင်းအဝယ် ပြီးဆုံး!*
+    await sendMessage(chatId, `✅ *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
 
+━━━━━━━━━━━━━━━
 📦 ${tx.products?.title}
 💵 ${tx.amount_ton} TON
+━━━━━━━━━━━━━━━
 
 ကျေးဇူးတင်ပါသည် 🙏`, backBtn())
   }
