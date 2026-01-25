@@ -1491,8 +1491,8 @@ async function handleBuyWithBalance(chatId: number, msgId: number, txId: string,
 
 💳 လက်ကျန်: *${newBuyerBalance.toFixed(2)} TON*
 
-⏳ ရောင်းသူမှ ပစ္စည်းပို့ပေးပါမည်
-⚠️ *သတိ:* ပစ္စည်းမရမီ "ရရှိပြီး" မနှိပ်ပါ!`, buyerBtns(tx.id, tx.seller?.telegram_username))
+⏳ ရောင်းသူထံမှ ပစ္စည်း ပို့ပေးမည်ဖြစ်ပါသည်။
+⚠️ *ပစ္စည်းမရရှိမှီ "ရရှိပြီး" မနှိပ်ပါနှင့်*`, buyerBtns(tx.id, tx.seller?.telegram_username))
 
   // Notify seller
   if (tx.seller?.telegram_id) {
