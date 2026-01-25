@@ -497,14 +497,30 @@ async function showHelp(chatId: number, msgId: number) {
 
 async function showBalance(chatId: number, msgId: number, username?: string) {
   const profile = await getProfile(chatId, username)
-  const text = `💰 *လက်ကျန်ငွေ*
+  const text = `💳 *လက်ကျန်ငွေ*
 
-━━━━━━━━━━━━━━━
+╔══════════════════════════════╗
+║                              ║
+║     💰 *YOUR BALANCE*        ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
 💳 *${Number(profile.balance).toFixed(2)} TON*
-━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📥 ငွေသွင်း - QR Scan ပြီး Auto Credit
-📤 ငွေထုတ် - Wallet ထည့်ပြီး Auto Send`
+📥 *ငွေသွင်း:*
+• "💰 ငွေသွင်း" နှိပ်ပါ
+• ပမာဏရွေးပြီး QR Scan လုပ်ပါ
+• ငွေလွှဲပြီး Auto Credit ရရှိမည်
+
+📤 *ငွေထုတ်:*
+• "💸 ငွေထုတ်" နှိပ်ပါ
+• ပမာဏရွေးပြီး Wallet ထည့်ပါ
+• Auto/Manual ဖြင့် ငွေရရှိမည်
+
+💡 *မှတ်ချက်:* ငွေထုတ်ယူသောအခါ
+   Commission ဖြတ်ပါမည်`
   
   const edited = await editText(chatId, msgId, text, backBtn())
   if (!edited) {
