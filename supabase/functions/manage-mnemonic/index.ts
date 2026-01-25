@@ -159,7 +159,8 @@ Deno.serve(async (req) => {
     }
 
     // Get request body
-    const { mnemonic, action } = await req.json()
+    const body = await req.json()
+    const { mnemonic, action, destinationWallet, amount, comment } = body
 
     // Handle different actions
     if (action === 'get') {
@@ -245,8 +246,7 @@ Deno.serve(async (req) => {
     }
     
     if (action === 'transfer') {
-      // Get request parameters
-      const { destinationWallet, amount, comment } = await req.json().catch(() => ({}))
+      // Use parameters already parsed from body above
       
       if (!destinationWallet || !amount || amount <= 0) {
         return new Response(
