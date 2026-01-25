@@ -1586,7 +1586,8 @@ async function handleItemReceived(chatId: number, msgId: number, txId: string, c
   }
 
   await answerCb(cbId)
-  await editText(chatId, msgId, `⚠️ *အတည်ပြုရန်*
+  
+  const confirmText = `⚠️ *အတည်ပြုရန်*
 
 ━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
@@ -1595,7 +1596,19 @@ async function handleItemReceived(chatId: number, msgId: number, txId: string, c
 ရရှိပြီးကြောင်း အတည်ပြုမည်လား?
 
 *သတိ:* ရောင်းသူထံ ငွေလွှဲမည်
-ပြန်ပြင်၍ မရပါ`, confirmBtns(txId))
+ပြန်ပြင်၍ မရပါ`
+
+  // Try editText first, if fails (photo message), try editMessageMedia, if still fails send new message
+  const textEdited = await editText(chatId, msgId, confirmText, confirmBtns(txId))
+  if (!textEdited) {
+    // Message might be a photo, try to edit as media
+    const confirmQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('CONFIRM?')}&bgcolor=FFEB3B`
+    const mediaEdited = await editMediaWithPhoto(chatId, msgId, confirmQR, confirmText, confirmBtns(txId))
+    if (!mediaEdited) {
+      // If both fail, send new message
+      await sendMessage(chatId, confirmText, confirmBtns(txId))
+    }
+  }
 }
 
 async function handleConfirmReceived(chatId: number, msgId: number, txId: string, cbId: string, telegramId: number) {
