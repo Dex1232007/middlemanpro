@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { Search, RefreshCw, ExternalLink, Download, Calendar, Filter } from 'lucide-react';
+import { Search, RefreshCw, ExternalLink, Download, Calendar, Filter, Star } from 'lucide-react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { TransactionStatusBadge } from '@/components/admin/StatusBadge';
+import { RatingDisplay } from '@/components/admin/RatingDisplay';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,6 +27,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { supabase } from '@/integrations/supabase/client';
 import type { Transaction, TransactionStatus } from '@/types/database';
@@ -33,8 +40,20 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 
+interface Rating {
+  id: string;
+  rating: number;
+  comment: string | null;
+  rater_id: string;
+  rated_id: string;
+}
+
+interface TransactionWithRatings extends Transaction {
+  ratings?: Rating[];
+}
+
 export default function AdminTransactions() {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<TransactionWithRatings[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -65,15 +84,28 @@ export default function AdminTransactions() {
   const fetchTransactions = async () => {
     setIsLoading(true);
     try {
-      let query = supabase
+      // Fetch transactions
+      const { data: txData, error: txError } = await supabase
         .from('transactions')
         .select('*')
         .order('created_at', { ascending: false });
 
-      const { data, error } = await query;
+      if (txError) throw txError;
 
-      if (error) throw error;
-      setTransactions(data as Transaction[] || []);
+      // Fetch all ratings
+      const { data: ratingsData, error: ratingsError } = await supabase
+        .from('ratings')
+        .select('*');
+
+      if (ratingsError) throw ratingsError;
+
+      // Map ratings to transactions
+      const txWithRatings: TransactionWithRatings[] = (txData || []).map((tx) => ({
+        ...tx,
+        ratings: ratingsData?.filter((r) => r.transaction_id === tx.id) || [],
+      }));
+
+      setTransactions(txWithRatings);
     } catch (error) {
       console.error('Error fetching transactions:', error);
     } finally {
@@ -305,6 +337,7 @@ export default function AdminTransactions() {
                     <TableHead>ပမာဏ (TON)</TableHead>
                     <TableHead>ကော်မရှင်</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Rating</TableHead>
                     <TableHead>TX Hash</TableHead>
                     <TableHead className="text-right">Link</TableHead>
                   </TableRow>
@@ -312,7 +345,7 @@ export default function AdminTransactions() {
                 <TableBody>
                   {filteredTransactions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center">
+                      <TableCell colSpan={7} className="h-24 text-center">
                         ရောင်းဝယ်မှု မရှိပါ
                       </TableCell>
                     </TableRow>
@@ -326,6 +359,22 @@ export default function AdminTransactions() {
                         <TableCell>{Number(tx.commission_ton).toFixed(4)}</TableCell>
                         <TableCell>
                           <TransactionStatusBadge status={tx.status} />
+                        </TableCell>
+                        <TableCell>
+                          {tx.ratings && tx.ratings.length > 0 ? (
+                            <div className="flex flex-col gap-1">
+                              {tx.ratings.map((rating) => (
+                                <RatingDisplay
+                                  key={rating.id}
+                                  rating={rating.rating}
+                                  comment={rating.comment}
+                                  size="sm"
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           {tx.ton_tx_hash ? (
