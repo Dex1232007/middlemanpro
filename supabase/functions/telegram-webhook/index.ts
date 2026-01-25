@@ -817,7 +817,7 @@ async function handleRating(chatId: number, msgId: number, rating: number, txId:
   // Ask for optional comment
   await setUserState(chatId, { action: 'rating_comment', msgId, data: { ratingId: insertedRating.id, rating } })
   
-  await editText(chatId, msgId, `✅ *${rating} ⭐ အဆင့်သတ်မှတ်ပြီး!*
+  const commentPrompt = `✅ *${rating} ⭐ အဆင့်သတ်မှတ်ပြီး!*
 
 ━━━━━━━━━━━━━━━
 ${'⭐'.repeat(rating)} ${rating}/5
@@ -826,7 +826,17 @@ ${'⭐'.repeat(rating)} ${rating}/5
 📝 *Feedback/Comment ရေးမည်လား?*
 
 ထပ်ပြောချင်တာရှိရင် အောက်မှာ ရိုက်ထည့်ပါ
-(သို့) "ကျော်မည်" နှိပ်ပါ`, skipCommentBtn())
+(သို့) "ကျော်မည်" နှိပ်ပါ`
+
+  // Try editText first, if fails (photo message), try editMessageMedia, then sendMessage
+  const textEdited = await editText(chatId, msgId, commentPrompt, skipCommentBtn())
+  if (!textEdited) {
+    const ratingQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('RATED')}&bgcolor=90EE90`
+    const mediaEdited = await editMessageMedia(chatId, msgId, ratingQR, commentPrompt, skipCommentBtn())
+    if (!mediaEdited) {
+      await sendMessage(chatId, commentPrompt, skipCommentBtn())
+    }
+  }
 }
 
 // Skip comment button
