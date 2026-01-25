@@ -415,7 +415,12 @@ async function showHome(chatId: number, msgId?: number, username?: string) {
   await deleteUserState(chatId)
   
   if (msgId) {
-    await editText(chatId, msgId, text, mainMenu())
+    // Try editText first, if fails (photo message), delete and send new message
+    const edited = await editText(chatId, msgId, text, mainMenu())
+    if (!edited) {
+      await deleteMsg(chatId, msgId)
+      await sendMessage(chatId, text, mainMenu())
+    }
   } else {
     await sendMessage(chatId, text, mainMenu())
   }
@@ -424,7 +429,7 @@ async function showHome(chatId: number, msgId?: number, username?: string) {
 // Helper functions removed - now using only inline keyboards
 
 async function showHelp(chatId: number, msgId: number) {
-  await editText(chatId, msgId, `📖 *အကူအညီ*
+  const text = `📖 *အကူအညီ*
 
 ━━━━━━━━━━━━━━━
 *🏪 ရောင်းသူ:*
@@ -441,43 +446,69 @@ async function showHelp(chatId: number, msgId: number) {
 *💰 ငွေသွင်း:* QR Scan > Auto Credit
 *💸 ငွေထုတ်:* ပမာဏရွေး > Auto Send
 ━━━━━━━━━━━━━━━
-⚠️ ပစ္စည်းမရမီ "ရရှိပြီး" မနှိပ်ပါ!`, backBtn())
+⚠️ ပစ္စည်းမရမီ "ရရှိပြီး" မနှိပ်ပါ!`
+  
+  const edited = await editText(chatId, msgId, text, backBtn())
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    await sendMessage(chatId, text, backBtn())
+  }
 }
 
 async function showBalance(chatId: number, msgId: number, username?: string) {
   const profile = await getProfile(chatId, username)
-  await editText(chatId, msgId, `💰 *လက်ကျန်ငွေ*
+  const text = `💰 *လက်ကျန်ငွေ*
 
 ━━━━━━━━━━━━━━━
 💳 *${Number(profile.balance).toFixed(2)} TON*
 ━━━━━━━━━━━━━━━
 
 📥 ငွေသွင်း - QR Scan ပြီး Auto Credit
-📤 ငွေထုတ် - Wallet ထည့်ပြီး Auto Send`, backBtn())
+📤 ငွေထုတ် - Wallet ထည့်ပြီး Auto Send`
+  
+  const edited = await editText(chatId, msgId, text, backBtn())
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    await sendMessage(chatId, text, backBtn())
+  }
 }
 
 async function showSellPrompt(chatId: number, msgId: number) {
   await setUserState(chatId, { action: 'sell_title', msgId })
-  await editText(chatId, msgId, `📦 *ပစ္စည်းရောင်းရန်*
+  const text = `📦 *ပစ္စည်းရောင်းရန်*
 
 ━━━━━━━━━━━━━━━
 📝 *အဆင့် ၁/၂*
 ပစ္စည်းအမည် ထည့်ပါ:
 ━━━━━━━━━━━━━━━
 
-ဥပမာ: \`iPhone 15 Pro Max\``, cancelBtn())
+ဥပမာ: \`iPhone 15 Pro Max\``
+  
+  const edited = await editText(chatId, msgId, text, cancelBtn())
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    const newMsg = await sendMessage(chatId, text, cancelBtn())
+    if (newMsg) await setUserState(chatId, { action: 'sell_title', msgId: newMsg })
+  }
 }
 
 async function showDepositOptions(chatId: number, msgId: number) {
   await setUserState(chatId, { action: 'dep_select', msgId })
-  await editText(chatId, msgId, `💰 *ငွေသွင်းရန်*
+  const text = `💰 *ငွေသွင်းရန်*
 
 ━━━━━━━━━━━━━━━
 သွင်းလိုသော ပမာဏ ရွေးပါ:
 ━━━━━━━━━━━━━━━
 
 ✨ QR Scan ပြီး ငွေပေးပို့ပါ
-💫 အလိုအလျောက် Credit ပေးပါမည်`, depositAmounts())
+💫 အလိုအလျောက် Credit ပေးပါမည်`
+  
+  const edited = await editText(chatId, msgId, text, depositAmounts())
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    const newMsg = await sendMessage(chatId, text, depositAmounts())
+    if (newMsg) await setUserState(chatId, { action: 'dep_select', msgId: newMsg })
+  }
 }
 
 async function showDepositQR(chatId: number, msgId: number, amount: number, username?: string) {
@@ -542,14 +573,19 @@ async function showWithdrawOptions(chatId: number, msgId: number, username?: str
   const commRate = commSetting ? parseFloat(commSetting.value) : 5
   
   if (balance <= 0) {
-    await editText(chatId, msgId, `❌ *လက်ကျန်ငွေ မရှိပါ*
+    const noBalanceText = `❌ *လက်ကျန်ငွေ မရှိပါ*
 
-ငွေသွင်းရန် "ငွေသွင်း" ကို နှိပ်ပါ`, backBtn())
+ငွေသွင်းရန် "ငွေသွင်း" ကို နှိပ်ပါ`
+    const edited = await editText(chatId, msgId, noBalanceText, backBtn())
+    if (!edited) {
+      await deleteMsg(chatId, msgId)
+      await sendMessage(chatId, noBalanceText, backBtn())
+    }
     return
   }
   
   await setUserState(chatId, { action: 'wd_select', msgId, data: { balance, commRate } })
-  await editText(chatId, msgId, `💸 *ငွေထုတ်ရန်*
+  const text = `💸 *ငွေထုတ်ရန်*
 
 ━━━━━━━━━━━━━━━
 💳 လက်ကျန်: *${balance.toFixed(2)} TON*
@@ -559,7 +595,14 @@ async function showWithdrawOptions(chatId: number, msgId: number, username?: str
 ထုတ်ယူလိုသော ပမာဏ ရွေးပါ:
 
 ⚠️ *မှတ်ချက်:* ငွေထုတ်ယူသောအခါ
-${commRate}% commission ဖြတ်ပါမည်`, withdrawAmounts(balance))
+${commRate}% commission ဖြတ်ပါမည်`
+  
+  const edited = await editText(chatId, msgId, text, withdrawAmounts(balance))
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    const newMsg = await sendMessage(chatId, text, withdrawAmounts(balance))
+    if (newMsg) await setUserState(chatId, { action: 'wd_select', msgId: newMsg, data: { balance, commRate } })
+  }
 }
 
 async function showWithdrawWalletPrompt(chatId: number, msgId: number, amount: number) {
