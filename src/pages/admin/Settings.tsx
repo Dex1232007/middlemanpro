@@ -615,8 +615,7 @@ export default function AdminSettings() {
                       try {
                         const { error } = await supabase
                           .from('settings')
-                          .update({ value: newMode })
-                          .eq('key', 'withdrawal_mode');
+                          .upsert({ key: 'withdrawal_mode', value: newMode }, { onConflict: 'key' });
                         
                         if (error) throw error;
                         
