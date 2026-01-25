@@ -285,16 +285,20 @@ const buyBtns = (txId: string, hasBalance: boolean) => ({
 })
 
 // Rating buttons (1-5 stars)
-const ratingBtns = (txId: string, ratedId: string) => ({
+// IMPORTANT: Telegram callback_data has a 64-byte limit.
+// Use short callback format: r:<rating>:<txKey>:<role>
+// - txKey: transaction.unique_link (preferred) or tx id
+// - role: 's' (rate seller) | 'b' (rate buyer)
+const ratingBtns = (txKey: string, role: 's' | 'b') => ({
   inline_keyboard: [
     [
-      { text: '⭐', callback_data: `r:1:${txId}:${ratedId}` },
-      { text: '⭐⭐', callback_data: `r:2:${txId}:${ratedId}` },
-      { text: '⭐⭐⭐', callback_data: `r:3:${txId}:${ratedId}` },
+      { text: '⭐', callback_data: `r:1:${txKey}:${role}` },
+      { text: '⭐⭐', callback_data: `r:2:${txKey}:${role}` },
+      { text: '⭐⭐⭐', callback_data: `r:3:${txKey}:${role}` },
     ],
     [
-      { text: '⭐⭐⭐⭐', callback_data: `r:4:${txId}:${ratedId}` },
-      { text: '⭐⭐⭐⭐⭐', callback_data: `r:5:${txId}:${ratedId}` },
+      { text: '⭐⭐⭐⭐', callback_data: `r:4:${txKey}:${role}` },
+      { text: '⭐⭐⭐⭐⭐', callback_data: `r:5:${txKey}:${role}` },
     ],
     [{ text: '⏭️ ကျော်မည်', callback_data: 'm:home' }],
   ],
@@ -1659,7 +1663,7 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
 ━━━━━━━━━━━━━━━
 
 ဝယ်သူအား ဘယ်လောက် အဆင့်ပေးမလဲ?
-သင့်အဆင့်သတ်မှတ်ချက်က အနာဂတ် ဝယ်သူများအတွက် အကူအညီဖြစ်ပါမည်`, ratingBtns(txId, tx.buyer.id))
+သင့်အဆင့်သတ်မှတ်ချက်က အနာဂတ် ဝယ်သူများအတွက် အကူအညီဖြစ်ပါမည်`, ratingBtns(tx.unique_link, 'b'))
       }
     }
   }
@@ -1691,7 +1695,7 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
 
 ကျေးဇူးတင်ပါသည် 🙏`
 
-  const successBtns = tx.seller?.id ? ratingBtns(txId, tx.seller.id) : backBtn()
+  const successBtns = tx.seller?.id ? ratingBtns(tx.unique_link, 's') : backBtn()
 
   // Try editText first, if fails (photo message), try alternatives
   const textEdited = await editText(chatId, msgId, successMsg, successBtns)
@@ -2045,11 +2049,42 @@ async function handleCallback(cb: { id: string; from: { id: number; username?: s
     return
   }
 
-  // Rating callback: r:<rating>:<txId>:<ratedId>
+  // Rating callback
+  // New: r:<rating>:<txKey>:<role> where txKey is transaction.unique_link (preferred) or tx id, role is 's'|'b'
+  // Old (back-compat): r:<rating>:<txId>:<ratedId>
   if (type === 'r') {
     const rating = parseInt(action)
-    const txId = id
-    const ratedId = data.split(':')[3] || ''
+    const txKey = id
+    const arg3 = data.split(':')[3] || ''
+
+    const isUuid = (v: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+
+    // Backward compatible path (old buttons)
+    if (isUuid(txKey) && isUuid(arg3)) {
+      if (rating >= 1 && rating <= 5) {
+        await handleRating(chatId, msgId, rating, txKey, arg3, cb.id, telegramId)
+      } else {
+        await answerCb(cb.id, '❌ အမှားဖြစ်ပွားပါသည်', true)
+      }
+      return
+    }
+
+    const role = arg3
+    if (role !== 's' && role !== 'b') {
+      await answerCb(cb.id, '❌ အမှားဖြစ်ပွားပါသည်', true)
+      return
+    }
+
+    const { data: txRow } = await supabase
+      .from('transactions')
+      .select('id, seller_id, buyer_id')
+      .eq(isUuid(txKey) ? 'id' : 'unique_link', txKey)
+      .maybeSingle()
+
+    const txId = txRow?.id
+    const ratedId = role === 's' ? txRow?.seller_id : txRow?.buyer_id
+
     if (rating >= 1 && rating <= 5 && txId && ratedId) {
       await handleRating(chatId, msgId, rating, txId, ratedId, cb.id, telegramId)
     } else {
