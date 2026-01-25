@@ -78,7 +78,7 @@ interface RatingSummaryProps {
 }
 
 export function RatingSummary({ avgRating, totalRatings, size = 'sm' }: RatingSummaryProps) {
-  if (!avgRating || !totalRatings) {
+  if (avgRating === null || avgRating === undefined || totalRatings === null || totalRatings === undefined || totalRatings === 0) {
     return <span className="text-muted-foreground text-xs">အဆင့်သတ်မှတ်မှုမရှိသေး</span>;
   }
 
