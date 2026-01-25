@@ -1,1 +1,11 @@
 project_id = "qhkyoddbkzetqrkehuto"
+
+[functions.telegram-webhook]
+verify_jwt = false
+
+[functions.ton-monitor]
+verify_jwt = false
+
+# Run ton-monitor every 30 seconds to check for incoming payments
+[functions.ton-monitor.schedule]
+cron = "*/1 * * * *"
