@@ -477,14 +477,16 @@ async function showDepositQR(chatId: number, msgId: number, amount: number, user
   
   await deleteMsg(chatId, msgId)
   
-  // Send QR and save the message ID for live status updates
+  // Enhanced QR display with better visual formatting
   const qrMsgId = await sendPhoto(chatId, qr, `💰 *ငွေသွင်း - ${amount} TON*
 
-━━━━━━━━━━━━━━━
-📱 QR Scan ပြုလုပ်ပါ
-━━━━━━━━━━━━━━━
+╔══════════════════════════════╗
+║     📱 QR Scan ပြုလုပ်ပါ      ║
+╚══════════════════════════════╝
 
-💳 *Wallet:*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💳 *Wallet Address:*
 \`${adminWallet}\`
 
 💵 *ပမာဏ:* ${amount} TON
@@ -492,12 +494,17 @@ async function showDepositQR(chatId: number, msgId: number, amount: number, user
 🔐 *Memo (မဖြစ်မနေထည့်ပါ):*
 \`${comment}\`
 
-━━━━━━━━━━━━━━━
-🔑 ID: \`${uniqueCode}\` | ⏰ ၃၀ မိနစ်
-━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━
+🔑 ID: \`${uniqueCode}\`
+⏰ သက်တမ်း: ၃၀ မိနစ်
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
-⚠️ *Memo မပါရင် ငွေထည့်မရပါ!*
-⏳ စောင့်ဆိုင်းနေသည်...`, backBtn())
+⚠️ *အရေးကြီး:* Memo မပါရင် ငွေထည့်မရပါ!
+
+⏳ ငွေပေးချေပြီးပါက အလိုအလျောက်
+   Balance ထဲသို့ ထည့်သွင်းပေးပါမည်...
+
+🔔 *Real-time* အတည်ပြုပေးပါမည်`, backBtn())
   
   // Save pending deposit with unique code, expiry, and message ID for live updates
   await supabase.from('deposits').insert({
@@ -1321,6 +1328,21 @@ async function handleBuyWithBalance(chatId: number, msgId: number, txId: string,
     return
   }
 
+  await answerCb(cbId, '🔄 စစ်ဆေးနေသည်...')
+
+  // Step 1: Show processing animation
+  const processingQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('PROCESSING...')}&bgcolor=FFF9C4`
+  await editMediaWithPhoto(chatId, msgId, processingQR, `⏳ *ငွေပေးချေနေသည်...*
+
+━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+💵 *${amount} TON*
+━━━━━━━━━━━━━━━
+
+🔄 Balance မှ ဖြတ်တောက်နေသည်...`)
+
+  await new Promise(r => setTimeout(r, 600))
+
   // Deduct from buyer's balance
   const newBuyerBalance = balance - amount
   await supabase.from('profiles').update({ balance: newBuyerBalance }).eq('id', profile.id)
@@ -1331,20 +1353,27 @@ async function handleBuyWithBalance(chatId: number, msgId: number, txId: string,
     ton_tx_hash: `balance_${Date.now()}`, // Mark as balance payment
   }).eq('id', tx.id)
 
-  await answerCb(cbId, '✅ Balance ဖြင့် ဝယ်ယူပြီး!')
+  // Step 2: Show success with celebration
+  const successQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('PAID!')}&bgcolor=90EE90`
+  await editMediaWithPhoto(chatId, msgId, successQR, `🎉 *Balance ဖြင့် ဝယ်ယူပြီး!*
 
-  // Notify buyer
-  await editText(chatId, msgId, `✅ *Balance ဖြင့် ဝယ်ယူပြီး!*
+╔══════════════════════════════╗
+║                              ║
+║      ✅ *ငွေပေးချေပြီး*       ║
+║                              ║
+╚══════════════════════════════╝
 
-━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
 💵 *${amount} TON*
-━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
 💳 လက်ကျန်: *${newBuyerBalance.toFixed(2)} TON*
 
 ⏳ ရောင်းသူမှ ပစ္စည်းပို့ပေးပါမည်
-💬 ရောင်းသူနဲ့ chat လုပ်ပါ`, backBtn())
+💬 ရောင်းသူနဲ့ chat လုပ်ပါ
+
+⚠️ *သတိ:* ပစ္စည်းမရမီ "ရရှိပြီး" မနှိပ်ပါ!`, buyerBtns(tx.id))
 
   // Notify seller
   if (tx.seller?.telegram_id) {
@@ -1352,18 +1381,25 @@ async function handleBuyWithBalance(chatId: number, msgId: number, txId: string,
       ? `@${profile.telegram_username}` 
       : `ID: ${profile.telegram_id || 'Unknown'}`
     
-    await sendMessage(tx.seller.telegram_id, `💰 *ငွေရရှိပြီး! (Balance)*
+    await sendMessage(tx.seller.telegram_id, `🎉 *ငွေရရှိပြီး! (Balance)*
 
-━━━━━━━━━━━━━━━
+╔══════════════════════════════╗
+║                              ║
+║      💰 *ငွေလက်ခံပြီး*        ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
 💵 *${amount.toFixed(4)} TON*
-━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
 👤 *ဝယ်သူ:* ${buyerUsername}
 
-ဝယ်သူမှ Balance ဖြင့် ငွေပေးချေပြီးပါပြီ
+✅ ဝယ်သူမှ Balance ဖြင့် ငွေပေးချေပြီးပါပြီ
+
 💬 ဝယ်သူနဲ့ chat လုပ်ပြီး ပစ္စည်းပို့ပါ
-ပစ္စည်းပို့ပြီးပါက "ပို့ပြီး" နှိပ်ပါ`, sellerBtns(tx.id))
+📦 ပစ္စည်းပို့ပြီးပါက "ပို့ပြီး" နှိပ်ပါ`, sellerBtns(tx.id))
   }
 
   // Notify admin for high-value transactions (>= 50 TON)

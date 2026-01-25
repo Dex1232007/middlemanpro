@@ -105,7 +105,7 @@ interface TonTx {
   in_msg: { source: string; destination: string; value: string; message?: string }
 }
 
-// ==================== PROGRESS BAR ====================
+// ==================== PROGRESS BAR & ANIMATIONS ====================
 function progressBar(step: number, total: number): string {
   const filled = '▓'
   const empty = '░'
@@ -113,6 +113,22 @@ function progressBar(step: number, total: number): string {
   const emptyCount = 10 - filledCount
   const percent = Math.round((step / total) * 100)
   return `${filled.repeat(filledCount)}${empty.repeat(emptyCount)} ${percent}%`
+}
+
+// Animated loading indicator
+function loadingDots(frame: number): string {
+  const dots = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+  return dots[frame % dots.length]
+}
+
+// Success animation frames
+function successAnimation(): string {
+  return `
+╔═══════════════════════════════════╗
+║                                   ║
+║           ✅ SUCCESS              ║
+║                                   ║
+╚═══════════════════════════════════╝`
 }
 
 // ==================== TELEGRAM ====================
@@ -577,26 +593,55 @@ Hash: \`${hash.substring(0, 20)}...\``)
       
       console.log(`✅ Matched deposit by code: ${hash} -> ${pendingDeposit.id}`)
       
-      // LIVE STATUS UPDATE: Show progress bar animation
+      // ENHANCED LIVE STATUS UPDATE: Multi-step animation
       const profile = pendingDeposit.profile
       if (profile?.telegram_id && pendingDeposit.telegram_msg_id) {
-        console.log(`📱 Updating deposit status: ${pendingDeposit.telegram_msg_id}`)
+        console.log(`📱 Updating deposit status with animation: ${pendingDeposit.telegram_msg_id}`)
         
-        // Step 1: Transaction detected - use editMessageMedia with checking image
-        const checkingQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('CHECKING...')}&bgcolor=f0f0f0`
-        await editTgMediaWithPhoto(profile.telegram_id, pendingDeposit.telegram_msg_id, checkingQR, `🔍 *စစ်ဆေးနေသည်...*
+        // Step 1: Transaction detected
+        const detectQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('DETECTING...')}&bgcolor=FFF9C4`
+        await editTgMediaWithPhoto(profile.telegram_id, pendingDeposit.telegram_msg_id, detectQR, `🔍 *Transaction တွေ့ရှိပြီး!*
 
 ━━━━━━━━━━━━━━━
 💵 *${amount.toFixed(4)} TON*
 🔑 \`${codePart}\`
 ━━━━━━━━━━━━━━━
 
-${progressBar(5, 10)}
+${progressBar(3, 10)}
 
-✅ Transaction တွေ့ရှိပြီး
-🔄 စစ်ဆေးနေသည်...`)
+🔎 Blockchain မှ စစ်ဆေးနေသည်...`)
+
+        await new Promise(r => setTimeout(r, 800))
+
+        // Step 2: Verifying
+        const verifyQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('VERIFYING...')}&bgcolor=E3F2FD`
+        await editTgMediaWithPhoto(profile.telegram_id, pendingDeposit.telegram_msg_id, verifyQR, `✨ *အတည်ပြုနေသည်...*
+
+━━━━━━━━━━━━━━━
+💵 *${amount.toFixed(4)} TON*
+🔑 \`${codePart}\`
+━━━━━━━━━━━━━━━
+
+${progressBar(6, 10)}
+
+🔐 Transaction hash စစ်ဆေးနေသည်...`)
 
         await new Promise(r => setTimeout(r, 600))
+
+        // Step 3: Processing
+        const processQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('PROCESSING...')}&bgcolor=E8F5E9`
+        await editTgMediaWithPhoto(profile.telegram_id, pendingDeposit.telegram_msg_id, processQR, `💫 *ငွေထည့်သွင်းနေသည်...*
+
+━━━━━━━━━━━━━━━
+💵 *${amount.toFixed(4)} TON*
+🔑 \`${codePart}\`
+━━━━━━━━━━━━━━━
+
+${progressBar(9, 10)}
+
+💰 Balance သို့ ထည့်သွင်းနေသည်...`)
+
+        await new Promise(r => setTimeout(r, 500))
       }
       
       // Use actual blockchain amount for crediting
@@ -615,27 +660,38 @@ ${progressBar(5, 10)}
       const newBal = Number(profile.balance) + actualAmount
       await supabase.from('profiles').update({ balance: newBal }).eq('id', profile.id)
 
-      // Update QR message to show confirmation using editMessageMedia
+      // Final success message with celebration
       if (profile.telegram_id && pendingDeposit.telegram_msg_id) {
-        const successQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('SUCCESS')}&bgcolor=90EE90`
-        const updated = await editTgMediaWithPhoto(profile.telegram_id, pendingDeposit.telegram_msg_id, successQR, `✅ *ငွေသွင်းမှု အတည်ပြုပြီး!*
+        const successQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('SUCCESS!')}&bgcolor=90EE90`
+        const updated = await editTgMediaWithPhoto(profile.telegram_id, pendingDeposit.telegram_msg_id, successQR, `🎉 *ငွေသွင်းမှု အောင်မြင်ပါပြီ!*
 
-━━━━━━━━━━━━━━━
-💵 +*${actualAmount.toFixed(4)} TON*
-💳 လက်ကျန်: *${newBal.toFixed(4)} TON*
-━━━━━━━━━━━━━━━
+╔══════════════════════════════╗
+║                              ║
+║      ✅ *SUCCESS*            ║
+║                              ║
+╚══════════════════════════════╝
 
-✨ Balance ထည့်သွင်းပြီး!`)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 ထည့်သွင်းပမာဏ: *+${actualAmount.toFixed(4)} TON*
+💳 လက်ကျန်ငွေ: *${newBal.toFixed(4)} TON*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 Hash: \`${hash.substring(0, 16)}...\`
+
+✨ Balance သို့ ထည့်သွင်းပြီးပါပြီ!
+🛒 ယခု ပစ္စည်းဝယ်ယူနိုင်ပါပြီ`)
         
         // Fallback: if editMedia fails, delete and send new message
         if (!updated) {
           await deleteTgMsg(profile.telegram_id, pendingDeposit.telegram_msg_id)
-          await sendTg(profile.telegram_id, `✅ *ငွေသွင်းမှု အတည်ပြုပြီး!*
+          await sendTg(profile.telegram_id, `🎉 *ငွေသွင်းမှု အောင်မြင်ပါပြီ!*
 
 ━━━━━━━━━━━━━━━
 💵 +*${actualAmount.toFixed(4)} TON*
 💳 လက်ကျန်: *${newBal.toFixed(4)} TON*
-━━━━━━━━━━━━━━━`)
+━━━━━━━━━━━━━━━
+
+✨ Balance သို့ ထည့်သွင်းပြီးပါပြီ!`)
         }
       }
       return
