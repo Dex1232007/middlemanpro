@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { Search, RefreshCw, Wallet, MessageCircle, Plus, Minus, Loader2, Ban, CheckCircle, Filter } from 'lucide-react';
+import { Search, RefreshCw, Wallet, MessageCircle, Plus, Minus, Loader2, Ban, CheckCircle, Filter, Star, Eye } from 'lucide-react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,13 +35,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { RatingDisplay, RatingSummary } from '@/components/admin/RatingDisplay';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 type StatusFilter = 'all' | 'active' | 'blocked';
+
+interface UserRating {
+  id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  rater_id: string;
+  transaction_id: string;
+  rater?: {
+    telegram_username: string | null;
+  };
+}
 
 interface ExtendedProfile extends Profile {
   is_blocked?: boolean;
   blocked_at?: string | null;
   blocked_reason?: string | null;
+  avg_rating?: number | null;
+  total_ratings?: number | null;
 }
 
 export default function AdminUsers() {
@@ -59,6 +75,11 @@ export default function AdminUsers() {
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
   const [blockReason, setBlockReason] = useState('');
   const [isBlocking, setIsBlocking] = useState(false);
+
+  // Profile detail dialog states
+  const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
+  const [profileRatings, setProfileRatings] = useState<UserRating[]>([]);
+  const [isLoadingRatings, setIsLoadingRatings] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -92,6 +113,54 @@ export default function AdminUsers() {
     setSelectedUser(user);
     setBlockReason('');
     setIsBlockDialogOpen(true);
+  };
+
+  const openProfileDialog = async (user: ExtendedProfile) => {
+    setSelectedUser(user);
+    setIsProfileDialogOpen(true);
+    setIsLoadingRatings(true);
+    
+    try {
+      // Fetch ratings for this user (where they are rated)
+      const { data, error } = await supabase
+        .from('ratings')
+        .select(`
+          id,
+          rating,
+          comment,
+          created_at,
+          rater_id,
+          transaction_id
+        `)
+        .eq('rated_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Fetch rater profiles
+      const raterIds = [...new Set((data || []).map(r => r.rater_id))];
+      const { data: raterProfiles } = await supabase
+        .from('profiles')
+        .select('id, telegram_username')
+        .in('id', raterIds);
+
+      const raterMap: Record<string, { telegram_username: string | null }> = {};
+      raterProfiles?.forEach(p => {
+        raterMap[p.id] = { telegram_username: p.telegram_username };
+      });
+
+      const ratingsWithRater = (data || []).map(r => ({
+        ...r,
+        rater: raterMap[r.rater_id] || { telegram_username: null }
+      }));
+
+      setProfileRatings(ratingsWithRater);
+    } catch (error) {
+      console.error('Error fetching ratings:', error);
+      toast.error('Ratings ယူရာတွင် အမှားရှိပါသည်');
+    } finally {
+      setIsLoadingRatings(false);
+    }
   };
 
   const handleBlockUser = async () => {
@@ -244,6 +313,7 @@ export default function AdminUsers() {
                   <TableRow>
                     <TableHead>Telegram</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Rating</TableHead>
                     <TableHead>Wallet လိပ်စာ</TableHead>
                     <TableHead>လက်ကျန် (TON)</TableHead>
                     <TableHead>စာရင်းသွင်းသည့်ရက်</TableHead>
@@ -253,7 +323,7 @@ export default function AdminUsers() {
                 <TableBody>
                   {filteredUsers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center">
+                      <TableCell colSpan={7} className="h-24 text-center">
                         အသုံးပြုသူ မရှိပါ
                       </TableCell>
                     </TableRow>
@@ -280,11 +350,22 @@ export default function AdminUsers() {
                               Blocked
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="gap-1 text-green-600 border-green-600">
+                            <Badge variant="outline" className="gap-1 border-emerald-500 text-emerald-600">
                               <CheckCircle className="h-3 w-3" />
                               Active
                             </Badge>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <button 
+                            onClick={() => openProfileDialog(user)}
+                            className="hover:opacity-80 transition-opacity cursor-pointer"
+                          >
+                            <RatingSummary 
+                              avgRating={user.avg_rating ?? null} 
+                              totalRatings={user.total_ratings ?? null} 
+                            />
+                          </button>
                         </TableCell>
                         <TableCell>
                           {user.ton_wallet_address ? (
@@ -468,6 +549,93 @@ export default function AdminUsers() {
             >
               {isBlocking && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {selectedUser?.is_blocked ? 'Unblock လုပ်မည်' : 'Block လုပ်မည်'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* User Profile/Ratings Dialog */}
+      <Dialog open={isProfileDialogOpen} onOpenChange={setIsProfileDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Star className="h-5 w-5 text-amber-500" />
+              @{selectedUser?.telegram_username || 'unknown'} ၏ Rating များ
+            </DialogTitle>
+            <DialogDescription asChild>
+              {selectedUser && (
+                <div className="mt-2">
+                  <div className="p-3 bg-muted rounded-lg space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span>ပျမ်းမျှ Rating:</span>
+                      <RatingSummary 
+                        avgRating={selectedUser.avg_rating ?? null} 
+                        totalRatings={selectedUser.total_ratings ?? null}
+                        size="md"
+                      />
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Telegram ID:</span>
+                      <strong>{selectedUser.telegram_id || 'N/A'}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>လက်ကျန်:</span>
+                      <strong>{Number(selectedUser.balance).toFixed(4)} TON</strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-4">
+            <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+              <MessageCircle className="h-4 w-4" />
+              Rating အသေးစိတ် ({profileRatings.length} ခု)
+            </h4>
+            
+            {isLoadingRatings ? (
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-16" />
+                ))}
+              </div>
+            ) : profileRatings.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                Rating မရှိသေးပါ
+              </div>
+            ) : (
+              <ScrollArea className="h-[300px] pr-4">
+                <div className="space-y-3">
+                  {profileRatings.map((rating) => (
+                    <div 
+                      key={rating.id} 
+                      className="p-3 border rounded-lg bg-card"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <RatingDisplay rating={rating.rating} showComment={false} />
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(rating.created_at), 'yyyy-MM-dd HH:mm')}
+                        </span>
+                      </div>
+                      {rating.comment && (
+                        <p className="text-sm text-muted-foreground italic border-l-2 border-primary/30 pl-2 mt-2">
+                          "{rating.comment}"
+                        </p>
+                      )}
+                      <div className="text-xs text-muted-foreground mt-2">
+                        Rating ပေးသူ: @{rating.rater?.telegram_username || 'unknown'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsProfileDialogOpen(false)}>
+              ပိတ်မည်
             </Button>
           </DialogFooter>
         </DialogContent>
