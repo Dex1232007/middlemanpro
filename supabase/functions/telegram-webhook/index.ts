@@ -587,15 +587,20 @@ async function showWithdrawOptions(chatId: number, msgId: number, username?: str
   await setUserState(chatId, { action: 'wd_select', msgId, data: { balance, commRate } })
   const text = `💸 *ငွေထုတ်ရန်*
 
-━━━━━━━━━━━━━━━
-💳 လက်ကျန်: *${balance.toFixed(2)} TON*
-💰 Commission: *${commRate}%*
-━━━━━━━━━━━━━━━
+╔══════════════════════════════╗
+║                              ║
+║     💸 *WITHDRAW*            ║
+║                              ║
+╚══════════════════════════════╝
 
-ထုတ်ယူလိုသော ပမာဏ ရွေးပါ:
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💳 *လက်ကျန်:* ${balance.toFixed(2)} TON
+💰 *Commission:* ${commRate}%
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
-⚠️ *မှတ်ချက်:* ငွေထုတ်ယူသောအခါ
-${commRate}% commission ဖြတ်ပါမည်`
+📤 ထုတ်ယူလိုသော ပမာဏ ရွေးပါ:
+
+⚠️ *မှတ်ချက်:* ငွေထုတ်ယူသောအခါ ${commRate}% commission ဖြတ်ပါမည်`
   
   const edited = await editText(chatId, msgId, text, withdrawAmounts(balance))
   if (!edited) {
@@ -620,15 +625,24 @@ async function showWithdrawWalletPrompt(chatId: number, msgId: number, amount: n
   await setUserState(chatId, { action: 'wd_wallet', msgId, data: { amount: amountNum, fee, receiveAmount, commRate } })
   await editText(chatId, msgId, `💸 *ငွေထုတ်ရန်*
 
-━━━━━━━━━━━━━━━
-💵 ထုတ်ယူမည့်ပမာဏ: *${amountNum.toFixed(4)} TON*
-📊 Commission (${commRate}%): *-${fee.toFixed(4)} TON*
-✅ လက်ခံရရှိမည်: *${receiveAmount.toFixed(4)} TON*
-━━━━━━━━━━━━━━━
+╔══════════════════════════════╗
+║                              ║
+║   📱 *ENTER WALLET*          ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ထုတ်ယူမည်:* ${amountNum.toFixed(4)} TON
+📊 *Commission (${commRate}%):* -${fee.toFixed(4)} TON
+✅ *လက်ခံရရှိမည်:* ${receiveAmount.toFixed(4)} TON
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📱 *သင်၏ TON Wallet လိပ်စာ ထည့်ပါ:*
 
-ဥပမာ: \`UQBxxxxxxxxxxxxxxxx\``, cancelBtn())
+ဥပမာ: \`UQBxxxxxxxxxxxxxxxx\`
+
+⚠️ *သတိ:* Wallet လိပ်စာ မှန်ကန်ရန် စစ်ဆေးပါ
+မှားယွင်းပါက ငွေပြန်ရနိုင်မည် မဟုတ်ပါ`, cancelBtn())
 }
 
 async function showOrders(chatId: number, msgId: number, username?: string) {
@@ -1172,12 +1186,18 @@ async function handleWithdrawRequest(chatId: number, wallet: string, msgId: numb
   // Send status message and save its ID for live updates
   const statusMsgId = await sendMessage(chatId, `⏳ *ငွေထုတ်ယူမှု တောင်းဆိုနေသည်...*
 
-━━━━━━━━━━━━━━━
-💵 ထုတ်ယူမည်: *${amount.toFixed(4)} TON*
-📊 Commission (${commRate}%): *-${fee.toFixed(4)} TON*
-✅ ရရှိမည်: *${receiveAmount.toFixed(4)} TON*
-💳 Wallet: \`${wallet.substring(0, 10)}...${wallet.slice(-6)}\`
-━━━━━━━━━━━━━━━
+╔══════════════════════════════╗
+║                              ║
+║    ⏳ *PROCESSING...*        ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ထုတ်ယူမည်:* ${amount.toFixed(4)} TON
+📊 *Commission (${commRate}%):* -${fee.toFixed(4)} TON
+✅ *ရရှိမည်:* ${receiveAmount.toFixed(4)} TON
+💳 *Wallet:* \`${wallet.substring(0, 10)}...${wallet.slice(-6)}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏳ *Status:* စောင့်ဆိုင်းနေသည်...`)
 
@@ -1298,18 +1318,26 @@ Admin ထံ ဆက်သွယ်ပါ။`, backBtn())
     if (statusMsgId) {
       await editText(chatId, statusMsgId, `✅ *ငွေထုတ်ယူမှု တောင်းဆိုပြီး!*
 
-━━━━━━━━━━━━━━━
-💵 ထုတ်ယူမည်: *${amount.toFixed(4)} TON*
-📊 Commission (${commRate}%): *-${fee.toFixed(4)} TON*
-✅ ရရှိမည်: *${receiveAmount.toFixed(4)} TON*
-💳 Wallet: \`${wallet.substring(0, 10)}...${wallet.slice(-6)}\`
-━━━━━━━━━━━━━━━
+╔══════════════════════════════╗
+║                              ║
+║    📋 *REQUEST SUBMITTED*    ║
+║                              ║
+╚══════════════════════════════╝
 
-💰 လက်ကျန်: *${newBalance.toFixed(4)} TON*
-   *(အတည်ပြုပြီးမှ ဖြတ်ပါမည်)*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ထုတ်ယူမည်:* ${amount.toFixed(4)} TON
+📊 *Commission (${commRate}%):* -${fee.toFixed(4)} TON
+✅ *ရရှိမည်:* ${receiveAmount.toFixed(4)} TON
+💳 *Wallet:* \`${wallet.substring(0, 10)}...${wallet.slice(-6)}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
-⏳ *Status:* Admin မှ အတည်ပြုပေးပါမည်
-အတည်ပြုပြီးပါက ငွေပို့ပေးပါမည်`, backBtn())
+💰 *လက်ကျန်:* ${newBalance.toFixed(4)} TON
+   _(အတည်ပြုပြီးမှ ဖြတ်ပါမည်)_
+
+⏳ *Status:* Admin မှ အတည်ပြုရန် စောင့်နေသည်
+
+📌 အတည်ပြုပြီးပါက သင်၏ Wallet သို့ 
+   ငွေအလိုအလျောက် ပို့ပေးပါမည်`, backBtn())
     }
   }
   
