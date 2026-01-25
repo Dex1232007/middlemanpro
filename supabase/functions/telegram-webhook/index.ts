@@ -1324,6 +1324,7 @@ async function handleBuyLink(chatId: number, link: string, username?: string) {
   const buyerBalance = Number(profile.balance)
   const hasEnoughBalance = buyerBalance >= Number(tx.amount_ton)
   const sellerUsername = tx.seller?.telegram_username ? `@${tx.seller.telegram_username}` : 'Seller'
+  const sellerRating = tx.seller?.avg_rating ? `⭐ ${Number(tx.seller.avg_rating).toFixed(1)} (${tx.seller.total_ratings || 0})` : '⭐ အဆင့်သတ်မှတ်မှုမရှိသေး'
 
   const comment = `tx_${tx.unique_link}`
   const qr = generateQR(adminWallet, tx.amount_ton, comment)
@@ -1335,6 +1336,7 @@ async function handleBuyLink(chatId: number, link: string, username?: string) {
 📦 *${tx.products?.title}*
 💵 *${tx.amount_ton} TON*
 🏪 ${sellerUsername}
+${sellerRating}
 ━━━━━━━━━━━━━━━`
 
   if (hasEnoughBalance) {
