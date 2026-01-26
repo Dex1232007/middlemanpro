@@ -2096,6 +2096,27 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
     const newBal = Number(tx.seller.balance) + Number(tx.seller_receives_ton)
     await supabase.from('profiles').update({ balance: newBal }).eq('id', tx.seller.id)
 
+    // Notify admin about completed transaction
+    try {
+      await fetch(`${SUPABASE_URL}/functions/v1/notify-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+        },
+        body: JSON.stringify({
+          type: 'admin_transaction_completed',
+          amount: tx.amount_ton,
+          product_title: tx.products?.title,
+          buyer_username: tx.buyer?.telegram_username,
+          seller_username: tx.seller?.telegram_username
+        })
+      })
+      console.log('Admin notified about completed transaction:', txId)
+    } catch (e) {
+      console.error('Failed to notify admin about completed transaction:', e)
+    }
+
     if (tx.seller.telegram_id) {
       // Notify seller and ask to rate buyer
       await sendMessage(tx.seller.telegram_id, `🎉 *အရောင်းအဝယ် အောင်မြင်ပြီး!*

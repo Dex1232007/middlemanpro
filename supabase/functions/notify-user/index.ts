@@ -30,7 +30,7 @@ async function sendTelegramMessage(chatId: number, text: string, parseMode = 'Ma
 }
 
 interface NotifyRequest {
-  type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx'
+  type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx' | 'admin_new_deposit' | 'admin_transaction_completed'
   profile_id?: string
   telegram_id?: number
   amount?: number
@@ -46,6 +46,8 @@ interface NotifyRequest {
   // High-value transaction fields
   buyer_username?: string
   seller_username?: string
+  // Deposit fields
+  unique_code?: string
 }
 
 async function verifyAdminAuth(req: Request): Promise<{ authorized: boolean; error?: string }> {
@@ -114,7 +116,7 @@ Deno.serve(async (req) => {
     let telegramId = body.telegram_id
 
     // For admin notifications, get admin telegram ID from settings
-    if (body.type === 'admin_new_dispute' || body.type === 'admin_new_withdrawal' || body.type === 'admin_high_value_tx') {
+    if (body.type === 'admin_new_dispute' || body.type === 'admin_new_withdrawal' || body.type === 'admin_high_value_tx' || body.type === 'admin_new_deposit' || body.type === 'admin_transaction_completed') {
       const { data: adminSetting } = await adminSupabase
         .from('settings')
         .select('value')
@@ -246,6 +248,32 @@ ${body.tx_hash ? `🔗 Hash: \`${body.tx_hash.substring(0, 16)}...\`` : ''}
 ━━━━━━━━━━━━━━━
 
 ✅ ငွေပေးချေမှု အတည်ပြုပြီးပါပြီ။`
+        break
+
+      case 'admin_new_deposit':
+        message = `💰 *ငွေသွင်းမှု အသစ်!*
+
+━━━━━━━━━━━━━━━
+💵 ပမာဏ: *${Number(body.amount).toFixed(4)} TON*
+👤 အသုံးပြုသူ: ${body.user_telegram_username ? `@${body.user_telegram_username}` : 'Unknown'}
+🔑 Code: \`${body.unique_code || 'N/A'}\`
+${body.tx_hash ? `🔗 Hash: \`${body.tx_hash.substring(0, 16)}...\`` : ''}
+━━━━━━━━━━━━━━━
+
+✅ Balance သို့ ထည့်သွင်းပြီးပါပြီ။`
+        break
+
+      case 'admin_transaction_completed':
+        message = `✅ *ရောင်းဝယ်မှု ပြီးဆုံးပြီး!*
+
+━━━━━━━━━━━━━━━
+📦 ${body.product_title || 'ပစ္စည်း'}
+💰 ပမာဏ: *${Number(body.amount).toFixed(4)} TON*
+🛒 ဝယ်သူ: ${body.buyer_username ? `@${body.buyer_username}` : 'Unknown'}
+🏪 ရောင်းသူ: ${body.seller_username ? `@${body.seller_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━
+
+💵 ရောင်းသူ Balance ထဲသို့ ငွေထည့်ပြီးပါပြီ။`
         break
 
       case 'custom':

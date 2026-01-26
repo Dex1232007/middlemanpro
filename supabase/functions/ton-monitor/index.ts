@@ -705,6 +705,28 @@ ${progressBar(9, 10)}
 ✨ Balance သို့ ထည့်သွင်းပြီးပါပြီ!`)
         }
       }
+      
+      // Notify admin about new deposit
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/notify-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+          },
+          body: JSON.stringify({
+            type: 'admin_new_deposit',
+            amount: actualAmount,
+            user_telegram_username: profile.telegram_username,
+            unique_code: codePart,
+            tx_hash: hash
+          })
+        })
+        console.log(`Admin notified about new deposit: ${actualAmount} TON`)
+      } catch (e) {
+        console.error('Failed to notify admin about deposit:', e)
+      }
+      
       return
     }
     
