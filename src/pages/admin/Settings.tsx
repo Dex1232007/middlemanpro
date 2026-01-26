@@ -535,6 +535,22 @@ export default function AdminSettings() {
       
       setBotMaintenance(enabled);
       toast.success(enabled ? 'Bot ပိတ်ထားပြီး - Maintenance Mode' : 'Bot ဖွင့်ပြီး - Active Mode');
+
+      // Send notification to admin if configured
+      if (adminTelegramId) {
+        try {
+          await supabase.functions.invoke('notify-user', {
+            body: {
+              telegramId: parseInt(adminTelegramId),
+              message: enabled 
+                ? `🔧 *MAINTENANCE MODE ON*\n\n━━━━━━━━━━━━━━━\n⚠️ Bot ပိတ်ထားပါပြီ\n━━━━━━━━━━━━━━━\n\n📅 အချိန်: ${new Date().toLocaleString('my-MM')}\n\n💡 User များ bot ကို အသုံးပြု၍မရတော့ပါ`
+                : `✅ *BOT ACTIVE*\n\n━━━━━━━━━━━━━━━\n🟢 Bot ပြန်ဖွင့်ပြီး\n━━━━━━━━━━━━━━━\n\n📅 အချိန်: ${new Date().toLocaleString('my-MM')}\n\n💡 User များ ပုံမှန်အတိုင်း အသုံးပြုနိုင်ပါပြီ`
+            }
+          });
+        } catch (notifyError) {
+          console.error('Failed to notify admin:', notifyError);
+        }
+      }
     } catch (error) {
       console.error('Error updating bot maintenance:', error);
       toast.error('ပြောင်းလဲမှု မအောင်မြင်ပါ');
