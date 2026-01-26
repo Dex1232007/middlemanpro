@@ -456,16 +456,16 @@ export default function AdminTransactions() {
                           </TableCell>
                           <TableCell>
                             {sellerUsername ? (
-                              <span className="text-sm">@{sellerUsername}</span>
+                              <span className="font-medium text-foreground">@{sellerUsername}</span>
                             ) : (
-                              <span className="text-muted-foreground text-xs">-</span>
+                              <span className="text-muted-foreground">-</span>
                             )}
                           </TableCell>
                           <TableCell>
                             {buyerUsername ? (
-                              <span className="text-sm">@{buyerUsername}</span>
+                              <span className="font-medium text-foreground">@{buyerUsername}</span>
                             ) : (
-                              <span className="text-muted-foreground text-xs">-</span>
+                              <span className="text-muted-foreground">-</span>
                             )}
                           </TableCell>
                           <TableCell>{Number(tx.amount_ton).toFixed(4)}</TableCell>
