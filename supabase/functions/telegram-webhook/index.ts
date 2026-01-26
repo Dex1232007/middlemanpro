@@ -2292,7 +2292,7 @@ async function handleDispute(chatId: number, msgId: number, txId: string, cbId: 
 🔒 ငွေကို Admin က ထိန်းသိမ်းထားပါသည်`, backBtn())
   }
 
-  // Notify admin about new dispute
+  // Notify admin about new dispute with resolution buttons
   try {
     await fetch(`${SUPABASE_URL}/functions/v1/notify-user`, {
       method: 'POST',
@@ -2305,6 +2305,7 @@ async function handleDispute(chatId: number, msgId: number, txId: string, cbId: 
         amount: tx.amount_ton,
         product_title: tx.products?.title,
         user_telegram_username: tx.buyer?.telegram_username,
+        seller_username: tx.seller?.telegram_username,
         transaction_link: tx.unique_link
       })
     })
@@ -2356,6 +2357,178 @@ async function handleCancelTx(chatId: number, msgId: number, txId: string, cbId:
   await editText(chatId, msgId, `❌ *ပယ်ဖျက်ပြီး*
 
 📦 ${tx.products?.title}`, backBtn())
+}
+
+// ==================== ADMIN DISPUTE RESOLUTION ====================
+async function handleAdminDisputeResolve(chatId: number, msgId: number, txLink: string, resolution: 'completed' | 'cancelled', cbId: string, telegramId: number) {
+  // Verify this user is an admin by checking admin_telegram_id setting
+  const { data: adminSetting } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'admin_telegram_id')
+    .maybeSingle()
+  
+  const adminTelegramId = adminSetting?.value ? parseInt(adminSetting.value) : null
+  
+  if (!adminTelegramId || telegramId !== adminTelegramId) {
+    await answerCb(cbId, '❌ Admin သာ ဖြေရှင်းနိုင်ပါသည်', true)
+    return
+  }
+
+  // Find the disputed transaction by unique_link
+  const { data: tx } = await supabase
+    .from('transactions')
+    .select('*, products(*), buyer:profiles!transactions_buyer_id_fkey(*), seller:profiles!transactions_seller_id_fkey(*)')
+    .eq('unique_link', txLink)
+    .single()
+
+  if (!tx) {
+    await answerCb(cbId, '❌ ရောင်းဝယ်မှု ရှာမတွေ့ပါ', true)
+    return
+  }
+
+  if (tx.status !== 'disputed') {
+    await answerCb(cbId, '❌ အငြင်းပွားမှု status မဟုတ်တော့ပါ', true)
+    return
+  }
+
+  if (resolution === 'completed') {
+    // Resolve in favor of seller - credit seller and complete transaction
+    await supabase.from('transactions').update({ 
+      status: 'completed', 
+      confirmed_at: new Date().toISOString() 
+    }).eq('id', tx.id)
+
+    // Credit seller
+    if (tx.seller) {
+      const newBal = Number(tx.seller.balance) + Number(tx.seller_receives_ton)
+      await supabase.from('profiles').update({ balance: newBal }).eq('id', tx.seller.id)
+
+      // Notify seller
+      if (tx.seller.telegram_id) {
+        await sendMessage(tx.seller.telegram_id, `✅ *အငြင်းပွားမှု ဖြေရှင်းပြီး - သင့်ဘက်မှ အနိုင်ရပါပြီ!*
+
+╔══════════════════════════════╗
+║                              ║
+║    ✅ *DISPUTE RESOLVED*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+💰 ရရှိသောငွေ: *+${Number(tx.seller_receives_ton).toFixed(4)} TON*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💳 သင့် Balance သို့ ထည့်သွင်းပြီးပါပြီ
+📤 ငွေထုတ်လိုပါက "ငွေထုတ်" ရွေးပါ`, backBtn())
+      }
+    }
+
+    // Notify buyer
+    if (tx.buyer?.telegram_id) {
+      await sendMessage(tx.buyer.telegram_id, `⚖️ *အငြင်းပွားမှု ဖြေရှင်းပြီး*
+
+╔══════════════════════════════╗
+║                              ║
+║    ⚖️ *DISPUTE RESOLVED*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+💵 *${tx.amount_ton} TON*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 Admin ဆုံးဖြတ်ချက်: ရောင်းသူထံ ငွေလွှဲပြီးပါပြီ
+ကျေးဇူးတင်ပါသည် 🙏`, backBtn())
+    }
+
+    await answerCb(cbId, '✅ ရောင်းသူထံ ငွေလွှဲပြီး!')
+    
+    await editText(chatId, msgId, `✅ *အငြင်းပွားမှု ဖြေရှင်းပြီး!*
+
+╔══════════════════════════════╗
+║                              ║
+║    ✅ *RESOLVED - SELLER*    ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+💵 *${tx.amount_ton} TON*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💰 ရောင်းသူထံ *${Number(tx.seller_receives_ton).toFixed(4)} TON* လွှဲပြီးပါပြီ
+✅ ဝယ်သူ နှင့် ရောင်းသူ နှစ်ဦးလုံးကို အကြောင်းကြားပြီးပါပြီ`)
+
+  } else {
+    // Resolve in favor of buyer - refund buyer and cancel transaction
+    await supabase.from('transactions').update({ 
+      status: 'cancelled' 
+    }).eq('id', tx.id)
+
+    // Refund buyer's balance
+    if (tx.buyer) {
+      const newBal = Number(tx.buyer.balance) + Number(tx.amount_ton)
+      await supabase.from('profiles').update({ balance: newBal }).eq('id', tx.buyer.id)
+
+      // Notify buyer
+      if (tx.buyer.telegram_id) {
+        await sendMessage(tx.buyer.telegram_id, `✅ *အငြင်းပွားမှု ဖြေရှင်းပြီး - သင့်ငွေ ပြန်အမ်းပြီး!*
+
+╔══════════════════════════════╗
+║                              ║
+║    ✅ *REFUND COMPLETE*      ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+💰 ပြန်အမ်းငွေ: *+${Number(tx.amount_ton).toFixed(4)} TON*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💳 သင့် Balance သို့ ပြန်ထည့်ပေးပြီးပါပြီ
+ကျေးဇူးတင်ပါသည် 🙏`, backBtn())
+      }
+    }
+
+    // Notify seller
+    if (tx.seller?.telegram_id) {
+      await sendMessage(tx.seller.telegram_id, `⚖️ *အငြင်းပွားမှု ဖြေရှင်းပြီး*
+
+╔══════════════════════════════╗
+║                              ║
+║    ⚖️ *DISPUTE RESOLVED*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+💵 *${tx.amount_ton} TON*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 Admin ဆုံးဖြတ်ချက်: ဝယ်သူထံ ငွေပြန်အမ်းပြီးပါပြီ
+အရောင်းအဝယ် ပယ်ဖျက်ခံရပါပြီ`, backBtn())
+    }
+
+    await answerCb(cbId, '✅ ဝယ်သူထံ ငွေပြန်အမ်းပြီး!')
+    
+    await editText(chatId, msgId, `✅ *အငြင်းပွားမှု ဖြေရှင်းပြီး!*
+
+╔══════════════════════════════╗
+║                              ║
+║    ✅ *RESOLVED - BUYER*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+💵 *${tx.amount_ton} TON*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💰 ဝယ်သူထံ *${Number(tx.amount_ton).toFixed(4)} TON* ပြန်အမ်းပြီးပါပြီ
+✅ ဝယ်သူ နှင့် ရောင်းသူ နှစ်ဦးလုံးကို အကြောင်းကြားပြီးပါပြီ`)
+  }
 }
 
 // ==================== MAIN HANDLERS ====================
@@ -2692,6 +2865,12 @@ async function handleCallback(cb: { id: string; from: { id: number; username?: s
     } else {
       await answerCb(cb.id, '❌ အမှားဖြစ်ပွားပါသည်', true)
     }
+    return
+  }
+
+  // Admin dispute resolution callback: adm:dcomp|dcanc:<txLink>
+  if (type === 'adm' && (action === 'dcomp' || action === 'dcanc')) {
+    await handleAdminDisputeResolve(chatId, msgId, id, action === 'dcomp' ? 'completed' : 'cancelled', cb.id, telegramId)
     return
   }
 
