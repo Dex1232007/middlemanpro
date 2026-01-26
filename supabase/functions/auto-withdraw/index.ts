@@ -79,20 +79,20 @@ async function processReferralEarningsOnWithdraw(
           l2Paid = earnings
         }
 
-        // Notify referrer
+        // Notify referrer with main menu button
         if (referrer.telegram_id) {
           await sendTg(referrer.telegram_id, `🎁 *Referral Commission ရရှိပြီး!*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 💰 *+${earnings.toFixed(4)} TON*
-📊 Level ${ref.level} (${rate}%)
+📊 Level ${ref.level} Commission (${rate}%)
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
 💳 လက်ကျန်: *${newBalance.toFixed(4)} TON*
 🎁 စုစုပေါင်း Referral: *${newTotalEarnings.toFixed(4)} TON*
 
 ✅ သင်၏ Referral မှ ငွေထုတ်သောကြောင့်
-   commission ရရှိပါသည်!`)
+   commission ရရှိပါသည်!`, mainMenuBtn())
         }
 
         console.log(`Referral earning credited: ${earnings} TON to ${referrer.id} (L${ref.level})`)
