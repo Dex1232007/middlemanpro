@@ -19,6 +19,7 @@ import AdminDisputes from "./pages/admin/Disputes";
 import InitialSetup from "./pages/admin/InitialSetup";
 import AdminSettings from "./pages/admin/Settings";
 import AdminBroadcast from "./pages/admin/Broadcast";
+import AdminReferrals from "./pages/admin/Referrals";
 
 const queryClient = new QueryClient();
 
@@ -79,6 +80,11 @@ const App = () => (
             <Route path="/admin/broadcast" element={
               <ProtectedRoute requireAdmin>
                 <AdminBroadcast />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/referrals" element={
+              <ProtectedRoute requireAdmin>
+                <AdminReferrals />
               </ProtectedRoute>
             } />
             
