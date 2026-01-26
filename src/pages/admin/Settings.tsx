@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Loader2, Wallet, Percent, Bot, Copy, Check, RefreshCw, CheckCircle, AlertCircle, Key, Eye, EyeOff, Shield, Trash2, Zap, Hand, Send, ArrowUpRight, Gift, Power, Wrench } from 'lucide-react';
+import { Save, Loader2, Wallet, Percent, Bot, Copy, Check, RefreshCw, CheckCircle, AlertCircle, Key, Eye, EyeOff, Shield, Trash2, Zap, Hand, Send, ArrowUpRight, Gift, Power, Wrench, Clock, Calendar } from 'lucide-react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -60,6 +60,12 @@ export default function AdminSettings() {
   const [botMaintenance, setBotMaintenance] = useState(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState('🔧 Bot ပြုပြင်နေဆဲ ဖြစ်ပါသည်။ ခဏစောင့်ပါ။');
   const [isUpdatingMaintenance, setIsUpdatingMaintenance] = useState(false);
+
+  // Scheduled maintenance state
+  const [scheduledEnabled, setScheduledEnabled] = useState(false);
+  const [scheduleStart, setScheduleStart] = useState('');
+  const [scheduleEnd, setScheduleEnd] = useState('');
+  const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 
   // Admin notification state
   const [adminTelegramId, setAdminTelegramId] = useState('');
@@ -307,6 +313,9 @@ export default function AdminSettings() {
       const refL2 = data?.find(s => s.key === 'referral_l2_rate');
       const botMaint = data?.find(s => s.key === 'bot_maintenance');
       const maintMsg = data?.find(s => s.key === 'maintenance_message');
+      const schedEnabled = data?.find(s => s.key === 'scheduled_maintenance_enabled');
+      const schedStart = data?.find(s => s.key === 'scheduled_maintenance_start');
+      const schedEnd = data?.find(s => s.key === 'scheduled_maintenance_end');
       
       if (commission) setCommissionRate(commission.value);
       if (wallet) setAdminWallet(wallet.value);
@@ -319,6 +328,9 @@ export default function AdminSettings() {
       if (refL2) setReferralL2Rate(refL2.value);
       if (botMaint) setBotMaintenance(botMaint.value === 'true');
       if (maintMsg) setMaintenanceMessage(maintMsg.value);
+      if (schedEnabled) setScheduledEnabled(schedEnabled.value === 'true');
+      if (schedStart) setScheduleStart(schedStart.value);
+      if (schedEnd) setScheduleEnd(schedEnd.value);
     } catch (error) {
       console.error('Error fetching settings:', error);
     } finally {
@@ -573,6 +585,48 @@ export default function AdminSettings() {
     }
   };
 
+  const saveScheduledMaintenance = async () => {
+    if (scheduledEnabled && (!scheduleStart || !scheduleEnd)) {
+      toast.error('အစချိန်နှင့် အဆုံးချိန် ထည့်ပါ');
+      return;
+    }
+
+    if (scheduledEnabled && new Date(scheduleStart) >= new Date(scheduleEnd)) {
+      toast.error('အဆုံးချိန်သည် အစချိန်ထက် နောက်ကျရမည်');
+      return;
+    }
+
+    setIsSavingSchedule(true);
+    try {
+      await supabase.from('settings').upsert({ key: 'scheduled_maintenance_enabled', value: scheduledEnabled ? 'true' : 'false' }, { onConflict: 'key' });
+      await supabase.from('settings').upsert({ key: 'scheduled_maintenance_start', value: scheduleStart }, { onConflict: 'key' });
+      await supabase.from('settings').upsert({ key: 'scheduled_maintenance_end', value: scheduleEnd }, { onConflict: 'key' });
+      
+      toast.success('Scheduled maintenance သိမ်းဆည်းပြီး');
+
+      // Notify admin
+      if (adminTelegramId && scheduledEnabled) {
+        try {
+          const startDate = new Date(scheduleStart).toLocaleString('my-MM');
+          const endDate = new Date(scheduleEnd).toLocaleString('my-MM');
+          await supabase.functions.invoke('notify-user', {
+            body: {
+              telegramId: parseInt(adminTelegramId),
+              message: `📅 *SCHEDULED MAINTENANCE*\n\n━━━━━━━━━━━━━━━\n🔧 Maintenance အချိန်ဇယား သတ်မှတ်ပြီး\n━━━━━━━━━━━━━━━\n\n⏰ စတင်: ${startDate}\n⏰ ပြီးဆုံး: ${endDate}\n\n💡 ထိုအချိန်တွင် Bot အလိုအလျောက် ပိတ်/ဖွင့်မည်`
+            }
+          });
+        } catch (e) {
+          console.error('Failed to notify admin:', e);
+        }
+      }
+    } catch (error) {
+      console.error('Error saving scheduled maintenance:', error);
+      toast.error('သိမ်းဆည်းမှု မအောင်မြင်ပါ');
+    } finally {
+      setIsSavingSchedule(false);
+    }
+  };
+
   return (
     <AdminLayout title="ဆက်တင်များ" subtitle="စနစ် ပြင်ဆင်မှုများ">
       <div className="space-y-6">
@@ -653,6 +707,93 @@ export default function AdminSettings() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Scheduled Maintenance */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Scheduled Maintenance
+            </CardTitle>
+            <CardDescription>
+              သတ်မှတ်ထားသော အချိန်တွင် Bot အလိုအလျောက် ပိတ်/ဖွင့်မည်
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border">
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-full ${scheduledEnabled ? 'bg-blue-500/20' : 'bg-muted'}`}>
+                    <Clock className={`h-6 w-6 ${scheduledEnabled ? 'text-blue-500' : 'text-muted-foreground'}`} />
+                  </div>
+                  <div>
+                    <div className="font-medium">
+                      {scheduledEnabled ? '📅 Schedule Active' : 'Schedule Disabled'}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {scheduledEnabled 
+                        ? 'သတ်မှတ်ချိန်တွင် အလိုအလျောက် ပိတ်/ဖွင့်မည်' 
+                        : 'Schedule ပိတ်ထားသည်'}
+                    </div>
+                  </div>
+                </div>
+                <Switch
+                  checked={scheduledEnabled}
+                  onCheckedChange={setScheduledEnabled}
+                />
+              </div>
+
+              {scheduledEnabled && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="scheduleStart">
+                      <Clock className="h-4 w-4 inline mr-1" />
+                      Maintenance စတင်ချိန်
+                    </Label>
+                    <Input
+                      id="scheduleStart"
+                      type="datetime-local"
+                      value={scheduleStart}
+                      onChange={(e) => setScheduleStart(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="scheduleEnd">
+                      <Clock className="h-4 w-4 inline mr-1" />
+                      Maintenance ပြီးဆုံးချိန်
+                    </Label>
+                    <Input
+                      id="scheduleEnd"
+                      type="datetime-local"
+                      value={scheduleEnd}
+                      onChange={(e) => setScheduleEnd(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {scheduledEnabled && scheduleStart && scheduleEnd && (
+                <Alert className="border-blue-500/50">
+                  <Calendar className="h-4 w-4 text-blue-500" />
+                  <AlertTitle className="text-blue-600 dark:text-blue-400">Schedule Preview</AlertTitle>
+                  <AlertDescription>
+                    🔧 <strong>{new Date(scheduleStart).toLocaleString('my-MM')}</strong> မှ <strong>{new Date(scheduleEnd).toLocaleString('my-MM')}</strong> အထိ Bot အလိုအလျောက် ပိတ်ထားမည်
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <Button onClick={saveScheduledMaintenance} disabled={isSavingSchedule} size="sm">
+                {isSavingSchedule ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Schedule သိမ်းမည်
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Commission Settings */}
         <Card>
           <CardHeader>
