@@ -12,16 +12,19 @@ const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 
 const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-async function sendTelegramMessage(chatId: number, text: string, parseMode = 'Markdown') {
+async function sendTelegramMessage(chatId: number, text: string, parseMode = 'Markdown', keyboard?: object) {
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`
+  const body: Record<string, unknown> = {
+    chat_id: chatId,
+    text,
+    parse_mode: parseMode,
+  }
+  if (keyboard) body.reply_markup = keyboard
+  
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: parseMode,
-    }),
+    body: JSON.stringify(body),
   })
   
   const result = await response.json()
@@ -218,13 +221,39 @@ ${body.tx_hash ? `TX Hash: \`${body.tx_hash}\`` : ''}`
       case 'admin_new_dispute':
         message = `⚠️ *အငြင်းပွားမှု အသစ်ရောက်ရှိလာပါပြီ!*
 
-📦 ${body.product_title || 'ပစ္စည်း'}
-💵 ပမာဏ: ${Number(body.amount).toFixed(4)} TON
-👤 အသုံးပြုသူ: ${body.user_telegram_username ? `@${body.user_telegram_username}` : 'Unknown'}
-🔗 Link: \`${body.transaction_link || 'N/A'}\`
+╔══════════════════════════════╗
+║                              ║
+║    🚨 *NEW DISPUTE*          ║
+║                              ║
+╚══════════════════════════════╝
 
-ကျေးဇူးပြု၍ Admin Dashboard မှ စစ်ဆေးပါ။`
-        break
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${body.product_title || 'ပစ္စည်း'}*
+💵 ပမာဏ: *${Number(body.amount).toFixed(4)} TON*
+👤 ဝယ်သူ: ${body.user_telegram_username ? `@${body.user_telegram_username}` : 'Unknown'}
+🏪 ရောင်းသူ: ${body.seller_username ? `@${body.seller_username}` : 'Unknown'}
+🔗 Link: \`${body.transaction_link || 'N/A'}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 *ဖြေရှင်းရန် အောက်မှ ရွေးချယ်ပါ:*
+✅ ပြီးဆုံး = ရောင်းသူထံ ငွေလွှဲ
+❌ ပယ်ဖျက် = ဝယ်သူထံ ငွေပြန်အမ်း`
+        
+        // Send with resolution buttons
+        const disputeBtns = {
+          inline_keyboard: [
+            [
+              { text: '✅ ပြီးဆုံး (ရောင်းသူထံ)', callback_data: `adm:dcomp:${body.transaction_link}` },
+              { text: '❌ ပယ်ဖျက် (ဝယ်သူထံ)', callback_data: `adm:dcanc:${body.transaction_link}` }
+            ]
+          ]
+        }
+        await sendTelegramMessage(telegramId, message, 'Markdown', disputeBtns)
+        
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
 
       case 'admin_new_withdrawal':
         message = `💸 *ငွေထုတ်ယူမှု အသစ်ရောက်ရှိလာပါပြီ!*
