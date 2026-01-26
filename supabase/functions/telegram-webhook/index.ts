@@ -526,6 +526,34 @@ const BLOCKED_MESSAGE = `🚫 *သင့်အကောင့် ပိတ်ထ
 အကူအညီလိုပါက Admin ထံ ဆက်သွယ်ပါ။
 ━━━━━━━━━━━━━━━`
 
+// Check if bot is in maintenance mode
+async function isMaintenanceMode(): Promise<{ enabled: boolean; message: string }> {
+  try {
+    const { data: maintSetting } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'bot_maintenance')
+      .maybeSingle()
+    
+    if (maintSetting?.value === 'true') {
+      const { data: msgSetting } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'maintenance_message')
+        .maybeSingle()
+      
+      return { 
+        enabled: true, 
+        message: msgSetting?.value || '🔧 Bot ပြုပြင်နေဆဲ ဖြစ်ပါသည်။ ခဏစောင့်ပါ။'
+      }
+    }
+    return { enabled: false, message: '' }
+  } catch (e) {
+    console.error('Error checking maintenance mode:', e)
+    return { enabled: false, message: '' }
+  }
+}
+
 const genLink = () => crypto.randomUUID().replace(/-/g, '').substring(0, 12)
 
 const statusText: Record<string, string> = {
@@ -2764,6 +2792,41 @@ Deno.serve(async (req) => {
 
     const body = await req.json()
     console.log('Webhook:', JSON.stringify(body).substring(0, 300))
+
+    // Check maintenance mode first
+    const maintenance = await isMaintenanceMode()
+    if (maintenance.enabled) {
+      // Get chat ID from message or callback
+      let chatId: number | null = null
+      if (body.message) chatId = body.message.chat.id
+      else if (body.callback_query) {
+        chatId = body.callback_query.message?.chat.id
+        // Answer callback to prevent loading state
+        if (body.callback_query.id) {
+          await answerCb(body.callback_query.id, '🔧 Bot ပြုပြင်နေဆဲ', true)
+        }
+      }
+      
+      if (chatId) {
+        const maintText = `╔══════════════════════════════╗
+║                              ║
+║     🔧 *MAINTENANCE MODE*    ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${maintenance.message}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⏳ ခဏစောင့်ဆိုင်းပြီး ပြန်လည်ကြိုးစားပါ`
+        
+        await sendMessage(chatId, maintText)
+      }
+      
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
 
     if (body.message) await handleMessage(body.message)
     else if (body.callback_query) await handleCallback(body.callback_query)
