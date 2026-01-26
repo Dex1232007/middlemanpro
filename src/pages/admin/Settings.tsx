@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Loader2, Wallet, Percent, Bot, Copy, Check, RefreshCw, CheckCircle, AlertCircle, Key, Eye, EyeOff, Shield, Trash2, Zap, Hand, Send, ArrowUpRight, Gift } from 'lucide-react';
+import { Save, Loader2, Wallet, Percent, Bot, Copy, Check, RefreshCw, CheckCircle, AlertCircle, Key, Eye, EyeOff, Shield, Trash2, Zap, Hand, Send, ArrowUpRight, Gift, Power, Wrench } from 'lucide-react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,6 +55,11 @@ export default function AdminSettings() {
   // Withdrawal mode state
   const [withdrawalMode, setWithdrawalMode] = useState<'manual' | 'auto'>('manual');
   const [isUpdatingWithdrawalMode, setIsUpdatingWithdrawalMode] = useState(false);
+
+  // Bot maintenance mode state
+  const [botMaintenance, setBotMaintenance] = useState(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState('🔧 Bot ပြုပြင်နေဆဲ ဖြစ်ပါသည်။ ခဏစောင့်ပါ။');
+  const [isUpdatingMaintenance, setIsUpdatingMaintenance] = useState(false);
 
   // Admin notification state
   const [adminTelegramId, setAdminTelegramId] = useState('');
@@ -300,6 +305,8 @@ export default function AdminSettings() {
       const adminTgId = data?.find(s => s.key === 'admin_telegram_id');
       const refL1 = data?.find(s => s.key === 'referral_l1_rate');
       const refL2 = data?.find(s => s.key === 'referral_l2_rate');
+      const botMaint = data?.find(s => s.key === 'bot_maintenance');
+      const maintMsg = data?.find(s => s.key === 'maintenance_message');
       
       if (commission) setCommissionRate(commission.value);
       if (wallet) setAdminWallet(wallet.value);
@@ -310,6 +317,8 @@ export default function AdminSettings() {
       if (adminTgId) setAdminTelegramId(adminTgId.value);
       if (refL1) setReferralL1Rate(refL1.value);
       if (refL2) setReferralL2Rate(refL2.value);
+      if (botMaint) setBotMaintenance(botMaint.value === 'true');
+      if (maintMsg) setMaintenanceMessage(maintMsg.value);
     } catch (error) {
       console.error('Error fetching settings:', error);
     } finally {
@@ -515,9 +524,119 @@ export default function AdminSettings() {
     );
   }
 
+  const toggleBotMaintenance = async (enabled: boolean) => {
+    setIsUpdatingMaintenance(true);
+    try {
+      const { error } = await supabase
+        .from('settings')
+        .upsert({ key: 'bot_maintenance', value: enabled ? 'true' : 'false' }, { onConflict: 'key' });
+      
+      if (error) throw error;
+      
+      setBotMaintenance(enabled);
+      toast.success(enabled ? 'Bot ပိတ်ထားပြီး - Maintenance Mode' : 'Bot ဖွင့်ပြီး - Active Mode');
+    } catch (error) {
+      console.error('Error updating bot maintenance:', error);
+      toast.error('ပြောင်းလဲမှု မအောင်မြင်ပါ');
+    } finally {
+      setIsUpdatingMaintenance(false);
+    }
+  };
+
+  const saveMaintenanceMessage = async () => {
+    try {
+      const { error } = await supabase
+        .from('settings')
+        .upsert({ key: 'maintenance_message', value: maintenanceMessage }, { onConflict: 'key' });
+      
+      if (error) throw error;
+      toast.success('Maintenance message သိမ်းဆည်းပြီး');
+    } catch (error) {
+      console.error('Error saving maintenance message:', error);
+      toast.error('သိမ်းဆည်းမှု မအောင်မြင်ပါ');
+    }
+  };
+
   return (
     <AdminLayout title="ဆက်တင်များ" subtitle="စနစ် ပြင်ဆင်မှုများ">
       <div className="space-y-6">
+        {/* Bot Maintenance Mode */}
+        <Card className={botMaintenance ? 'border-orange-500/50' : 'border-green-500/50'}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              {botMaintenance ? <Wrench className="h-5 w-5 text-orange-500" /> : <Power className="h-5 w-5 text-green-500" />}
+              Bot ဖွင့်/ပိတ် (Maintenance Mode)
+            </CardTitle>
+            <CardDescription>
+              Bot ကို ခဏတာ ပိတ်ထားချင်ပါက ဤနေရာမှ ပိတ်နိုင်သည်
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border">
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-full ${botMaintenance ? 'bg-orange-500/20' : 'bg-green-500/20'}`}>
+                    {botMaintenance ? (
+                      <Wrench className="h-6 w-6 text-orange-500" />
+                    ) : (
+                      <Power className="h-6 w-6 text-green-500" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-medium">
+                      {botMaintenance ? '🔧 Maintenance Mode' : '✅ Bot Active'}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {botMaintenance 
+                        ? 'User များ bot ကို အသုံးပြု၍မရပါ' 
+                        : 'Bot ပုံမှန်အတိုင်း အလုပ်လုပ်နေသည်'}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`text-sm font-medium ${!botMaintenance ? 'text-green-500' : 'text-muted-foreground'}`}>
+                    Active
+                  </span>
+                  <Switch
+                    checked={botMaintenance}
+                    onCheckedChange={toggleBotMaintenance}
+                    disabled={isUpdatingMaintenance}
+                  />
+                  <span className={`text-sm font-medium ${botMaintenance ? 'text-orange-500' : 'text-muted-foreground'}`}>
+                    Maintenance
+                  </span>
+                </div>
+              </div>
+
+              {botMaintenance && (
+                <Alert className="border-orange-500/50">
+                  <Wrench className="h-4 w-4 text-orange-500" />
+                  <AlertTitle className="text-orange-600 dark:text-orange-400">Maintenance Mode Active</AlertTitle>
+                  <AlertDescription>
+                    Bot ပိတ်ထားသည်။ User များ message ပို့လာပါက အောက်ပါ message ပြပေးမည်။
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="maintenanceMessage">Maintenance Message</Label>
+                <div className="flex gap-2">
+                  <Textarea
+                    id="maintenanceMessage"
+                    placeholder="Bot ပြုပြင်နေဆဲ ဖြစ်ပါသည်..."
+                    value={maintenanceMessage}
+                    onChange={(e) => setMaintenanceMessage(e.target.value)}
+                    className="min-h-[80px]"
+                  />
+                </div>
+                <Button onClick={saveMaintenanceMessage} size="sm" variant="outline">
+                  <Save className="h-4 w-4 mr-2" />
+                  Message သိမ်းမည်
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         {/* Commission Settings */}
         <Card>
           <CardHeader>
