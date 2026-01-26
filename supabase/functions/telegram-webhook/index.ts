@@ -2077,6 +2077,9 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
 
   await supabase.from('transactions').update({ status: 'completed', confirmed_at: new Date().toISOString() }).eq('id', txId)
 
+  // Process referral earnings - credit to referrer's balance immediately
+  await processReferralEarnings(txId, Number(tx.commission_ton), tx.buyer?.id || null)
+
   // Credit seller
   if (tx.seller) {
     const newBal = Number(tx.seller.balance) + Number(tx.seller_receives_ton)
