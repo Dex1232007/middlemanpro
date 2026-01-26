@@ -13,6 +13,98 @@ const ADMIN_WALLET_ENV = Deno.env.get('ADMIN_TON_WALLET_ADDRESS') || ''
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
+// ==================== REFERRAL EARNINGS ====================
+async function processReferralEarningsOnWithdraw(
+  profileId: string,
+  withdrawAmount: number,
+  withdrawalId: string
+): Promise<{ l1Paid: number; l2Paid: number }> {
+  let l1Paid = 0
+  let l2Paid = 0
+
+  try {
+    // Get referral rates from settings
+    const { data: l1Setting } = await supabase.from('settings').select('value').eq('key', 'referral_l1_rate').maybeSingle()
+    const { data: l2Setting } = await supabase.from('settings').select('value').eq('key', 'referral_l2_rate').maybeSingle()
+    
+    const l1Rate = l1Setting ? parseFloat(l1Setting.value) : 5 // 5% default
+    const l2Rate = l2Setting ? parseFloat(l2Setting.value) : 3 // 3% default
+
+    // Get the user's referrers (both L1 and L2)
+    const { data: referrals } = await supabase
+      .from('referrals')
+      .select('referrer_id, level')
+      .eq('referred_id', profileId)
+
+    if (!referrals || referrals.length === 0) {
+      console.log(`No referrers found for profile ${profileId}`)
+      return { l1Paid, l2Paid }
+    }
+
+    for (const ref of referrals) {
+      const rate = ref.level === 1 ? l1Rate : l2Rate
+      const earnings = Math.round((withdrawAmount * rate / 100) * 10000) / 10000
+
+      if (earnings <= 0) continue
+
+      // Record referral earning (use withdrawal_id as transaction reference)
+      await supabase.from('referral_earnings').insert({
+        referrer_id: ref.referrer_id,
+        from_profile_id: profileId,
+        from_transaction_id: withdrawalId, // Using withdrawal ID as reference
+        amount_ton: earnings,
+        level: ref.level
+      })
+
+      // Credit referrer's balance
+      const { data: referrer } = await supabase
+        .from('profiles')
+        .select('id, balance, total_referral_earnings, telegram_id')
+        .eq('id', ref.referrer_id)
+        .single()
+
+      if (referrer) {
+        const newBalance = Number(referrer.balance) + earnings
+        const newTotalEarnings = Number(referrer.total_referral_earnings || 0) + earnings
+
+        await supabase.from('profiles').update({
+          balance: newBalance,
+          total_referral_earnings: newTotalEarnings
+        }).eq('id', referrer.id)
+
+        // Track paid amounts
+        if (ref.level === 1) {
+          l1Paid = earnings
+        } else {
+          l2Paid = earnings
+        }
+
+        // Notify referrer
+        if (referrer.telegram_id) {
+          await sendTg(referrer.telegram_id, `🎁 *Referral Commission ရရှိပြီး!*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💰 *+${earnings.toFixed(4)} TON*
+📊 Level ${ref.level} (${rate}%)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💳 လက်ကျန်: *${newBalance.toFixed(4)} TON*
+🎁 စုစုပေါင်း Referral: *${newTotalEarnings.toFixed(4)} TON*
+
+✅ သင်၏ Referral မှ ငွေထုတ်သောကြောင့်
+   commission ရရှိပါသည်!`)
+        }
+
+        console.log(`Referral earning credited: ${earnings} TON to ${referrer.id} (L${ref.level})`)
+      }
+    }
+  } catch (e) {
+    console.error('Process referral earnings error:', e)
+  }
+
+  return { l1Paid, l2Paid }
+}
+
 const TON_API_V2 = 'https://toncenter.com/api/v2'
 
 // ==================== PROGRESS BAR ====================
@@ -403,6 +495,12 @@ async function processWithdrawals() {
         admin_notes: `Auto-sent. Amount: ${withdrawAmount} TON, Fee (${commRate}%): ${fee.toFixed(4)} TON, Sent: ${sendAmount.toFixed(4)} TON`,
       }).eq('id', wd.id)
       
+      // Process referral earnings on withdrawal
+      const { l1Paid, l2Paid } = await processReferralEarningsOnWithdraw(profile.id, withdrawAmount, wd.id)
+      const referralInfo = (l1Paid > 0 || l2Paid > 0) 
+        ? `\n🎁 *Referral Bonus:* L1: ${l1Paid.toFixed(4)}, L2: ${l2Paid.toFixed(4)}`
+        : ''
+      
       // Delete old status message and send fresh confirmation
       if (profile.telegram_id) {
         if (wd.telegram_msg_id) {
@@ -432,7 +530,7 @@ async function processWithdrawals() {
 🎉 ကျေးဇူးတင်ပါသည်!`, mainMenuBtn())
       }
       
-      console.log(`✅ Withdrawal ${wd.id} completed: ${sendAmount.toFixed(4)} TON`)
+      console.log(`✅ Withdrawal ${wd.id} completed: ${sendAmount.toFixed(4)} TON${referralInfo}`)
       processed++
       
       // Delay between transactions for rate limiting
