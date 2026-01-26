@@ -427,6 +427,8 @@ export default function AdminTransactions() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>ရက်စွဲ</TableHead>
+                    <TableHead>ရောင်းသူ</TableHead>
+                    <TableHead>ဝယ်သူ</TableHead>
                     <TableHead>ပမာဏ (TON)</TableHead>
                     <TableHead>ကော်မရှင်</TableHead>
                     <TableHead>Status</TableHead>
@@ -438,59 +440,78 @@ export default function AdminTransactions() {
                 <TableBody>
                   {filteredTransactions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center">
+                      <TableCell colSpan={9} className="h-24 text-center">
                         ရောင်းဝယ်မှု မရှိပါ
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredTransactions.map((tx) => (
-                      <TableRow key={tx.id}>
-                        <TableCell className="font-medium">
-                          {format(new Date(tx.created_at), 'yyyy-MM-dd HH:mm')}
-                        </TableCell>
-                        <TableCell>{Number(tx.amount_ton).toFixed(4)}</TableCell>
-                        <TableCell>{Number(tx.commission_ton).toFixed(4)}</TableCell>
-                        <TableCell>
-                          <TransactionStatusBadge status={tx.status} />
-                        </TableCell>
-                        <TableCell>
-                          {tx.ratings && tx.ratings.length > 0 ? (
-                            <div className="flex flex-col gap-1">
-                              {tx.ratings.map((rating) => (
-                                <RatingDisplay
-                                  key={rating.id}
-                                  rating={rating.rating}
-                                  comment={rating.comment}
-                                  size="sm"
-                                />
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {tx.ton_tx_hash ? (
-                            <a
-                              href={`https://tonscan.org/tx/${tx.ton_tx_hash}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 text-primary hover:underline"
-                            >
-                              {tx.ton_tx_hash.slice(0, 8)}...
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <code className="rounded bg-muted px-2 py-1 text-xs">
-                            {tx.unique_link.slice(0, 12)}...
-                          </code>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    filteredTransactions.map((tx) => {
+                      const sellerUsername = tx.seller_id ? profiles[tx.seller_id]?.telegram_username : null;
+                      const buyerUsername = tx.buyer_id ? profiles[tx.buyer_id]?.telegram_username : null;
+                      
+                      return (
+                        <TableRow key={tx.id}>
+                          <TableCell className="font-medium">
+                            {format(new Date(tx.created_at), 'yyyy-MM-dd HH:mm')}
+                          </TableCell>
+                          <TableCell>
+                            {sellerUsername ? (
+                              <span className="text-sm">@{sellerUsername}</span>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {buyerUsername ? (
+                              <span className="text-sm">@{buyerUsername}</span>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>{Number(tx.amount_ton).toFixed(4)}</TableCell>
+                          <TableCell>{Number(tx.commission_ton).toFixed(4)}</TableCell>
+                          <TableCell>
+                            <TransactionStatusBadge status={tx.status} />
+                          </TableCell>
+                          <TableCell>
+                            {tx.ratings && tx.ratings.length > 0 ? (
+                              <div className="flex flex-col gap-1">
+                                {tx.ratings.map((rating) => (
+                                  <RatingDisplay
+                                    key={rating.id}
+                                    rating={rating.rating}
+                                    comment={rating.comment}
+                                    size="sm"
+                                  />
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {tx.ton_tx_hash ? (
+                              <a
+                                href={`https://tonscan.org/tx/${tx.ton_tx_hash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-primary hover:underline"
+                              >
+                                {tx.ton_tx_hash.slice(0, 8)}...
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <code className="rounded bg-muted px-2 py-1 text-xs">
+                              {tx.unique_link.slice(0, 12)}...
+                            </code>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
