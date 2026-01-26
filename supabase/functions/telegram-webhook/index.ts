@@ -692,9 +692,20 @@ async function showHelp(chatId: number, msgId: number) {
 async function showReferral(chatId: number, msgId: number, username?: string) {
   const profile = await getProfile(chatId, username)
   
-  // Get bot username for link
-  const { data: botSetting } = await supabase.from('settings').select('value').eq('key', 'bot_username').maybeSingle()
-  const botUsername = botSetting?.value || 'YourBot'
+  // Get bot username directly from Telegram API (most accurate)
+  let botUsername = 'YourBot'
+  try {
+    const getMeRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe`)
+    const getMeData = await getMeRes.json()
+    if (getMeData.ok && getMeData.result?.username) {
+      botUsername = getMeData.result.username
+    }
+  } catch (e) {
+    console.error('Failed to get bot username:', e)
+    // Fallback to settings if API fails
+    const { data: botSetting } = await supabase.from('settings').select('value').eq('key', 'bot_username').maybeSingle()
+    botUsername = botSetting?.value || 'YourBot'
+  }
   
   // Get referral stats
   const { count: l1Count } = await supabase
