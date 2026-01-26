@@ -224,7 +224,7 @@ function generateQR(wallet: string, amount: number, comment: string): string {
 // Main Menu - Inline keyboard only (no reply keyboard)
 const mainMenu = () => ({
   inline_keyboard: [
-    [{ text: '📦 ရောင်းမည်', callback_data: 'm:sell' }, { text: '💰 ငွေသွင်း', callback_data: 'm:dep' }],
+    [{ text: '📦 Order ပြုလုပ်မည်', callback_data: 'm:sell' }, { text: '💰 ငွေသွင်း', callback_data: 'm:dep' }],
     [{ text: '💸 ငွေထုတ်', callback_data: 'm:wd' }, { text: '💳 လက်ကျန်', callback_data: 'm:bal' }],
     [{ text: '📋 အမှာစာများ', callback_data: 'm:ord' }, { text: '🛍️ ကျွန်ုပ်၏လင့်များ', callback_data: 'm:mylinks' }],
     [{ text: '📜 မှတ်တမ်း', callback_data: 'm:hist' }, { text: '⭐ ကျွန်ုပ်၏အဆင့်', callback_data: 'm:rating' }],
@@ -647,7 +647,7 @@ async function showHelp(chatId: number, msgId: number) {
 
 🏪 *ရောင်းသူအတွက်:*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-1️⃣ "📦 ရောင်းမည်" ခလုပ်နှိပ်ပါ
+1️⃣ "📦 Order ပြုလုပ်မည်" ခလုပ်နှိပ်ပါ
 2️⃣ ပစ္စည်းအမည်နှင့် ဈေးနှုန်း ထည့်ပါ
 3️⃣ Link ရရှိပြီး ဝယ်သူထံ ပေးပို့ပါ
 4️⃣ ဝယ်သူမှ ငွေပေးချေပြီးပါက အကြောင်းကြားမည်
@@ -810,11 +810,11 @@ async function showBalance(chatId: number, msgId: number, username?: string) {
 
 async function showSellPrompt(chatId: number, msgId: number) {
   await setUserState(chatId, { action: 'sell_title', msgId })
-  const text = `📦 *ပစ္စည်းရောင်းရန်*
+  const text = `📦 *ပစ္စည်းရောင်း/ဝယ်ရန်*
 
 ━━━━━━━━━━━━━━━
 📝 *အဆင့် ၁/၂*
-ပစ္စည်းအမည် ထည့်ပါ:
+မိမိရောင်းဝယ်လိုသည့် ပစ္စည်းအမျိုးအမည် ရေးပို့ပါ:
 ━━━━━━━━━━━━━━━
 
 ဥပမာ: \`iPhone 15 Pro Max\``
@@ -1002,7 +1002,7 @@ async function showOrders(chatId: number, msgId: number, username?: string) {
   if ((!sellerTxs?.length) && (!buyerTxs?.length)) {
     await editText(chatId, msgId, `📭 *အရောင်းအဝယ် မရှိပါ*
 
-ပစ္စည်းရောင်းရန် "ရောင်းမည်" နှိပ်ပါ`, backBtn())
+ပစ္စည်းရောင်း/ဝယ်ရန် "Order ပြုလုပ်မည်" နှိပ်ပါ`, backBtn())
     return
   }
 
@@ -1100,9 +1100,9 @@ async function showMyLinks(chatId: number, msgId: number, username?: string) {
     .limit(15)
 
   if (!myLinks?.length) {
-    await editText(chatId, msgId, `📭 *ရောင်းလင့် မရှိသေးပါ*
+    await editText(chatId, msgId, `📭 *Order Link မရှိသေးပါ*
 
-ပစ္စည်းရောင်းရန် "ရောင်းမည်" နှိပ်ပါ`, backBtn())
+ပစ္စည်းရောင်း/ဝယ်ရန် "Order ပြုလုပ်မည်" နှိပ်ပါ`, backBtn())
     return
   }
 
@@ -1313,7 +1313,7 @@ async function handleSellTitle(chatId: number, title: string, msgId: number) {
   
   // Save title and move to price step
   await setUserState(chatId, { action: 'sell_price', msgId, data: { title: safeTitle } })
-  await editText(chatId, msgId, `📦 *ပစ္စည်းရောင်းရန်*
+  await editText(chatId, msgId, `📦 *ပစ္စည်းရောင်း/ဝယ်ရန်*
 
 ━━━━━━━━━━━━━━━
 📦 *${sanitizeTitle(safeTitle)}*
@@ -1387,7 +1387,7 @@ async function handleSellPrice(chatId: number, priceText: string, msgId: number,
   const productLink = `https://t.me/${botUsername}?start=buy_${link}`
 
   const safeTitle = sanitizeTitle(title)
-  await editText(chatId, msgId, `✅ *ပစ္စည်း ဖန်တီးပြီး!*
+  await editText(chatId, msgId, `✅ *Order ဖန်တီးပြီး!*
 
 ━━━━━━━━━━━━━━━
 📦 *${safeTitle}*
@@ -1398,7 +1398,7 @@ async function handleSellPrice(chatId: number, priceText: string, msgId: number,
 🔗 *Link:*
 \`${productLink}\`
 
-📢 ဝယ်သူထံ ဤ Link ပေးပို့ပါ
+📢 မိမိနှင့် ရောင်းဝယ်မည့်သူထံသို့ ဤ Link အားပို့ပြီး ငွေချေမှုလုပ်ဆောင်ခိုင်းပါ
 
 💡 *မှတ်ချက်:* ငွေထုတ်ယူသောအခါ
 commission ဖြတ်ပါမည်`, backBtn())
