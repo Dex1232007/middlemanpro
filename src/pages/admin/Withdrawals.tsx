@@ -46,15 +46,22 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
+interface WithdrawalWithProfile extends Omit<Withdrawal, 'profile'> {
+  profile?: {
+    telegram_username: string | null;
+    telegram_id: number | null;
+  } | null;
+}
+
 export default function AdminWithdrawals() {
-  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
+  const [withdrawals, setWithdrawals] = useState<WithdrawalWithProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
   const [isExporting, setIsExporting] = useState(false);
-  const [selectedWithdrawal, setSelectedWithdrawal] = useState<Withdrawal | null>(null);
+  const [selectedWithdrawal, setSelectedWithdrawal] = useState<WithdrawalWithProfile | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [dialogAction, setDialogAction] = useState<'approve' | 'reject'>('approve');
   const [adminNotes, setAdminNotes] = useState('');
@@ -111,11 +118,11 @@ export default function AdminWithdrawals() {
 
       const { data, error } = await supabase
         .from('withdrawals')
-        .select('*')
+        .select('*, profile:profiles(telegram_username, telegram_id)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setWithdrawals(data as Withdrawal[] || []);
+      setWithdrawals(data as WithdrawalWithProfile[] || []);
     } catch (error) {
       console.error('Error fetching withdrawals:', error);
     } finally {
@@ -123,7 +130,7 @@ export default function AdminWithdrawals() {
     }
   };
 
-  const openActionDialog = (withdrawal: Withdrawal, action: 'approve' | 'reject') => {
+  const openActionDialog = (withdrawal: WithdrawalWithProfile, action: 'approve' | 'reject') => {
     setSelectedWithdrawal(withdrawal);
     setDialogAction(action);
     setAdminNotes('');
@@ -240,7 +247,9 @@ export default function AdminWithdrawals() {
   };
 
   const filteredWithdrawals = withdrawals.filter((wd) => {
-    const matchesSearch = wd.destination_wallet.toLowerCase().includes(searchTerm.toLowerCase());
+    const username = wd.profile?.telegram_username || '';
+    const matchesSearch = wd.destination_wallet.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      username.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || wd.status === statusFilter;
     
     const wdDate = new Date(wd.created_at);
@@ -270,7 +279,7 @@ export default function AdminWithdrawals() {
     setIsExporting(true);
     
     try {
-      const headers = ['ရက်စွဲ', 'ပမာဏ (TON)', `Commission (${commissionRate}%)`, 'ရရှိမည်', 'Wallet', 'Status', 'TX Hash'];
+      const headers = ['ရက်စွဲ', 'Username', 'ပမာဏ (TON)', `Commission (${commissionRate}%)`, 'ရရှိမည်', 'Wallet', 'Status', 'TX Hash'];
       
       const csvRows = [
         headers.join(','),
@@ -278,8 +287,10 @@ export default function AdminWithdrawals() {
           const amount = Number(wd.amount_ton);
           const fee = amount * (commissionRate / 100);
           const receiveAmount = amount - fee;
+          const username = wd.profile?.telegram_username ? `@${wd.profile.telegram_username}` : '-';
           return [
             format(new Date(wd.created_at), 'yyyy-MM-dd HH:mm'),
+            username,
             amount.toFixed(4),
             fee.toFixed(4),
             receiveAmount.toFixed(4),
@@ -398,7 +409,7 @@ export default function AdminWithdrawals() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Wallet လိပ်စာဖြင့် ရှာပါ..."
+                  placeholder="Wallet သို့မဟုတ် Username ဖြင့် ရှာပါ..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -501,6 +512,7 @@ export default function AdminWithdrawals() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>ရက်စွဲ</TableHead>
+                    <TableHead>Username</TableHead>
                     <TableHead>ပမာဏ</TableHead>
                     <TableHead>Commission ({commissionRate}%)</TableHead>
                     <TableHead>ရရှိမည်</TableHead>
@@ -512,7 +524,7 @@ export default function AdminWithdrawals() {
                 <TableBody>
                   {filteredWithdrawals.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center">
+                      <TableCell colSpan={8} className="h-24 text-center">
                         ငွေထုတ်ယူမှု မရှိပါ
                       </TableCell>
                     </TableRow>
@@ -521,12 +533,19 @@ export default function AdminWithdrawals() {
                       const amount = Number(wd.amount_ton);
                       const fee = amount * (commissionRate / 100);
                       const receiveAmount = amount - fee;
-  const pendingCount = withdrawals.filter(w => w.status === 'pending').length;
+                      const username = wd.profile?.telegram_username;
 
-  return (
+                      return (
                         <TableRow key={wd.id}>
                           <TableCell className="font-medium">
                             {format(new Date(wd.created_at), 'yyyy-MM-dd HH:mm')}
+                          </TableCell>
+                          <TableCell>
+                            {username ? (
+                              <span className="font-medium text-foreground">@{username}</span>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
                           </TableCell>
                           <TableCell className="font-mono font-semibold">
                             {amount.toFixed(4)} TON
