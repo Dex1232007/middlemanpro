@@ -727,6 +727,12 @@ async function showReferral(chatId: number, msgId: number, username?: string) {
 
   const totalEarnings = Number(profile.total_referral_earnings) || 0
 
+  // Get referral rates from settings (same as admin panel)
+  const { data: l1Setting } = await supabase.from('settings').select('value').eq('key', 'referral_l1_rate').maybeSingle()
+  const { data: l2Setting } = await supabase.from('settings').select('value').eq('key', 'referral_l2_rate').maybeSingle()
+  const l1Rate = l1Setting ? parseFloat(l1Setting.value) : 5
+  const l2Rate = l2Setting ? parseFloat(l2Setting.value) : 3
+
   const refLink = `https://t.me/${botUsername}?start=ref_${profile.referral_code}`
 
   const text = `🎁 *Referral Program*
@@ -743,8 +749,8 @@ async function showReferral(chatId: number, msgId: number, username?: string) {
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📊 *Commission Rates:*
-• Level 1: *10%* (တိုက်ရိုက် refer)
-• Level 2: *5%* (သင် refer လူ၏ referral)
+• Level 1: *${l1Rate}%* (တိုက်ရိုက် refer)
+• Level 2: *${l2Rate}%* (သင် refer လူ၏ referral)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 👥 *သင်၏ Referrals:*
