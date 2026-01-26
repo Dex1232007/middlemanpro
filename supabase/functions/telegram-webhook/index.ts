@@ -697,14 +697,19 @@ async function showReferral(chatId: number, msgId: number, username?: string) {
   try {
     const getMeRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe`)
     const getMeData = await getMeRes.json()
+    console.log('[DEBUG] getMe API response:', getMeData)
     if (getMeData.ok && getMeData.result?.username) {
       botUsername = getMeData.result.username
+      console.log('[INFO] Bot username from API:', botUsername)
+    } else {
+      console.warn('[WARN] getMe API failed or no username:', getMeData)
     }
   } catch (e) {
     console.error('Failed to get bot username:', e)
     // Fallback to settings if API fails
     const { data: botSetting } = await supabase.from('settings').select('value').eq('key', 'bot_username').maybeSingle()
     botUsername = botSetting?.value || 'YourBot'
+    console.log('[INFO] Using fallback bot username:', botUsername)
   }
   
   // Get referral stats
