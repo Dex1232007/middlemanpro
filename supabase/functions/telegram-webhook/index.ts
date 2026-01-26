@@ -2303,7 +2303,7 @@ async function handleMessage(msg: { chat: { id: number }; from?: { username?: st
   }
 
   // Commands
-  if (text.startsWith('/start')) {
+  if (text === '/start' || text.startsWith('/start ')) {
     const parts = text.split(' ')
     if (parts[1]?.startsWith('buy_')) {
       await handleBuyLink(chatId, parts[1].replace('buy_', ''), username)
@@ -2316,6 +2316,37 @@ async function handleMessage(msg: { chat: { id: number }; from?: { username?: st
       await showHome(chatId, undefined, username)
     }
     await deleteUserState(chatId)
+    return
+  }
+
+  // /ping - Check if bot is alive
+  if (text === '/ping') {
+    await sendMessage(chatId, `🟢 *Bot Alive!*
+
+━━━━━━━━━━━━━━━
+✅ Status: Online
+⚡ Response: Fast
+🕐 Time: ${new Date().toISOString()}
+━━━━━━━━━━━━━━━
+
+Bot ကောင်းစွာအလုပ်လုပ်နေပါသည်!`, backBtn())
+    return
+  }
+
+  // /help - Show help commands
+  if (text === '/help') {
+    await sendMessage(chatId, `📚 *Bot Commands*
+
+━━━━━━━━━━━━━━━
+/start - 🏠 ပင်မစာမျက်နှာ
+/ping - 🟢 Bot Alive စစ်ဆေးရန်
+/sell <အမည်> <ဈေး> - 📦 ရောင်းမယ်
+/help - 📚 Commands များ
+━━━━━━━━━━━━━━━
+
+💡 *အသုံးပြုပုံ:*
+• /sell iPhone 15 150
+• /sell hei 1928`, backBtn())
     return
   }
 
