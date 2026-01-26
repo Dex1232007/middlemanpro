@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Loader2, Wallet, Percent, Bot, Copy, Check, RefreshCw, CheckCircle, AlertCircle, Key, Eye, EyeOff, Shield, Trash2, Zap, Hand, Send, ArrowUpRight } from 'lucide-react';
+import { Save, Loader2, Wallet, Percent, Bot, Copy, Check, RefreshCw, CheckCircle, AlertCircle, Key, Eye, EyeOff, Shield, Trash2, Zap, Hand, Send, ArrowUpRight, Gift } from 'lucide-react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,6 +58,11 @@ export default function AdminSettings() {
 
   // Admin notification state
   const [adminTelegramId, setAdminTelegramId] = useState('');
+
+  // Referral rates state
+  const [referralL1Rate, setReferralL1Rate] = useState('5');
+  const [referralL2Rate, setReferralL2Rate] = useState('3');
+  const [isSavingReferral, setIsSavingReferral] = useState(false);
   const [isSavingAdminTg, setIsSavingAdminTg] = useState(false);
 
   // Wallet balance states
@@ -293,6 +298,8 @@ export default function AdminSettings() {
       const withdrawMode = data?.find(s => s.key === 'withdrawal_mode');
       const minWd = data?.find(s => s.key === 'min_withdrawal_amount');
       const adminTgId = data?.find(s => s.key === 'admin_telegram_id');
+      const refL1 = data?.find(s => s.key === 'referral_l1_rate');
+      const refL2 = data?.find(s => s.key === 'referral_l2_rate');
       
       if (commission) setCommissionRate(commission.value);
       if (wallet) setAdminWallet(wallet.value);
@@ -301,6 +308,8 @@ export default function AdminSettings() {
       if (withdrawMode) setWithdrawalMode(withdrawMode.value as 'manual' | 'auto');
       if (minWd) setMinWithdrawal(minWd.value);
       if (adminTgId) setAdminTelegramId(adminTgId.value);
+      if (refL1) setReferralL1Rate(refL1.value);
+      if (refL2) setReferralL2Rate(refL2.value);
     } catch (error) {
       console.error('Error fetching settings:', error);
     } finally {
@@ -424,6 +433,30 @@ export default function AdminSettings() {
     }
   };
 
+  const saveReferralRates = async () => {
+    setIsSavingReferral(true);
+    try {
+      const { error: l1Error } = await supabase
+        .from('settings')
+        .upsert({ key: 'referral_l1_rate', value: referralL1Rate }, { onConflict: 'key' });
+
+      if (l1Error) throw l1Error;
+
+      const { error: l2Error } = await supabase
+        .from('settings')
+        .upsert({ key: 'referral_l2_rate', value: referralL2Rate }, { onConflict: 'key' });
+
+      if (l2Error) throw l2Error;
+
+      toast.success('Referral Rates သိမ်းဆည်းပြီးပါပြီ');
+    } catch (error) {
+      console.error('Error saving referral rates:', error);
+      toast.error('သိမ်းဆည်းမှု မအောင်မြင်ပါ');
+    } finally {
+      setIsSavingReferral(false);
+    }
+  };
+
   const copyWebhookUrl = () => {
     navigator.clipboard.writeText(webhookUrl);
     setCopied(true);
@@ -537,6 +570,79 @@ export default function AdminSettings() {
                   ဥပမာ: 0.01 ဆိုပါက 0.01 TON အောက် ထုတ်ယူ၍မရပါ
                 </p>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Referral Rates Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Gift className="h-5 w-5" />
+              Referral Commission Rates
+            </CardTitle>
+            <CardDescription>
+              Referral program ရဲ့ commission ရာခိုင်နှုန်းများ (ငွေထုတ်ချိန်မှ ပေးမည်)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="referralL1">Level 1 (Direct) Rate (%)</Label>
+                  <div className="flex gap-4">
+                    <Input
+                      id="referralL1"
+                      type="number"
+                      min="0"
+                      max="50"
+                      step="0.5"
+                      value={referralL1Rate}
+                      onChange={(e) => setReferralL1Rate(e.target.value)}
+                      className="max-w-[150px]"
+                    />
+                    <span className="flex items-center text-muted-foreground">%</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    တိုက်ရိုက် Referrer ရရှိမည့် %
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="referralL2">Level 2 (Indirect) Rate (%)</Label>
+                  <div className="flex gap-4">
+                    <Input
+                      id="referralL2"
+                      type="number"
+                      min="0"
+                      max="50"
+                      step="0.5"
+                      value={referralL2Rate}
+                      onChange={(e) => setReferralL2Rate(e.target.value)}
+                      className="max-w-[150px]"
+                    />
+                    <span className="flex items-center text-muted-foreground">%</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Level 2 Referrer ရရှိမည့် %
+                  </p>
+                </div>
+              </div>
+              
+              <div className="p-3 bg-muted/50 rounded-lg border">
+                <p className="text-sm">
+                  <Gift className="h-4 w-4 inline mr-1" />
+                  ဥပမာ: User က 10 TON ထုတ်ယူပါက L1 Referrer {referralL1Rate}% = {(10 * parseFloat(referralL1Rate || '0') / 100).toFixed(2)} TON, L2 Referrer {referralL2Rate}% = {(10 * parseFloat(referralL2Rate || '0') / 100).toFixed(2)} TON ရရှိမည်
+                </p>
+              </div>
+
+              <Button onClick={saveReferralRates} disabled={isSavingReferral} size="sm">
+                {isSavingReferral ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Referral Rates သိမ်းမည်
+              </Button>
             </div>
           </CardContent>
         </Card>
