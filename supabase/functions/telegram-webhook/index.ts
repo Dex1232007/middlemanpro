@@ -2413,60 +2413,9 @@ Bot ကောင်းစွာအလုပ်လုပ်နေပါသည်!
 
   // /referral - Show referral link and stats
   if (text === '/referral') {
-    const profile = await getProfile(chatId, username)
-    if (!profile) {
-      await sendMessage(chatId, '❌ Profile မရှိပါ', backBtn())
-      return
-    }
-
-    // Get referral stats
-    const { data: l1Refs } = await supabase
-      .from('referrals')
-      .select('id')
-      .eq('referrer_id', profile.id)
-      .eq('level', 1)
-    
-    const { data: l2Refs } = await supabase
-      .from('referrals')
-      .select('id')
-      .eq('referrer_id', profile.id)
-      .eq('level', 2)
-    
-    const l1Count = l1Refs?.length || 0
-    const l2Count = l2Refs?.length || 0
-    const totalEarnings = Number(profile.total_referral_earnings || 0)
-
-    // Get referral rates
-    const { data: l1Setting } = await supabase.from('settings').select('value').eq('key', 'referral_l1_rate').maybeSingle()
-    const { data: l2Setting } = await supabase.from('settings').select('value').eq('key', 'referral_l2_rate').maybeSingle()
-    const l1Rate = l1Setting ? parseFloat(l1Setting.value) : 5
-    const l2Rate = l2Setting ? parseFloat(l2Setting.value) : 3
-
-    // Get bot username for referral link
-    const { data: botSetting } = await supabase.from('settings').select('value').eq('key', 'telegram_bot_username').maybeSingle()
-    const botUsername = botSetting?.value || 'your_bot'
-    const referralLink = `https://t.me/${botUsername}?start=ref_${profile.referral_code}`
-
-    await sendMessage(chatId, `🎁 *Referral Program*
-
-━━━━━━━━━━━━━━━
-📊 *Commission Rates:*
-• Level 1 (Direct): ${l1Rate}%
-• Level 2 (Indirect): ${l2Rate}%
-━━━━━━━━━━━━━━━
-
-👥 *သင်၏ Referrals:*
-• Level 1: ${l1Count} ယောက်
-• Level 2: ${l2Count} ယောက်
-
-💰 *စုစုပေါင်း ရရှိငွေ:* ${totalEarnings.toFixed(4)} TON
-
-━━━━━━━━━━━━━━━
-🔗 *သင်၏ Referral Link:*
-\`${referralLink}\`
-━━━━━━━━━━━━━━━
-
-📤 ဤ link ကို မျှဝေပြီး commission ရယူပါ!`, backBtn())
+    // Use showReferral function for consistency
+    const msgId = await sendMessage(chatId, '⏳ Loading...', backBtn())
+    if (msgId) await showReferral(chatId, msgId, username)
     return
   }
 
