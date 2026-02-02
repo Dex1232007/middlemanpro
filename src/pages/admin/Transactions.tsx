@@ -33,6 +33,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { supabase } from '@/integrations/supabase/client';
 import type { Transaction, TransactionStatus } from '@/types/database';
@@ -50,6 +52,8 @@ interface Rating {
 
 interface TransactionWithRatings extends Transaction {
   ratings?: Rating[];
+  currency: string;
+  amount_mmk: number | null;
 }
 
 export default function AdminTransactions() {
@@ -57,6 +61,7 @@ export default function AdminTransactions() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [currencyTab, setCurrencyTab] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
   const [minAmount, setMinAmount] = useState<string>('');
@@ -130,7 +135,19 @@ export default function AdminTransactions() {
     }
   };
 
+  // Currency stats
+  const currencyStats = {
+    allCount: transactions.length,
+    tonCount: transactions.filter(tx => tx.currency === 'TON').length,
+    mmkCount: transactions.filter(tx => tx.currency === 'MMK').length,
+    pendingTON: transactions.filter(tx => tx.currency === 'TON' && ['pending_payment', 'payment_received', 'item_sent'].includes(tx.status)).length,
+    pendingMMK: transactions.filter(tx => tx.currency === 'MMK' && ['pending_payment', 'payment_received', 'item_sent'].includes(tx.status)).length,
+  };
+
   const filteredTransactions = transactions.filter((tx) => {
+    // Currency filter
+    const matchesCurrency = currencyTab === 'all' || tx.currency === currencyTab;
+
     // Search by link, TX hash, or seller/buyer username
     const sellerUsername = tx.seller_id ? profiles[tx.seller_id]?.telegram_username || '' : '';
     const buyerUsername = tx.buyer_id ? profiles[tx.buyer_id]?.telegram_username || '' : '';
@@ -148,7 +165,7 @@ export default function AdminTransactions() {
     const matchesDateTo = !dateTo || txDate <= new Date(dateTo.getTime() + 24 * 60 * 60 * 1000 - 1);
     
     // Amount filters
-    const amount = Number(tx.amount_ton);
+    const amount = currencyTab === 'MMK' ? Number(tx.amount_mmk || 0) : Number(tx.amount_ton);
     const matchesMinAmount = !minAmount || amount >= parseFloat(minAmount);
     const matchesMaxAmount = !maxAmount || amount <= parseFloat(maxAmount);
     
@@ -166,7 +183,7 @@ export default function AdminTransactions() {
       matchesRating = hasRating && avgRating < 3;
     }
     
-    return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo && matchesMinAmount && matchesMaxAmount && matchesRating;
+    return matchesCurrency && matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo && matchesMinAmount && matchesMaxAmount && matchesRating;
   });
 
   const clearFilters = () => {
@@ -180,6 +197,13 @@ export default function AdminTransactions() {
   };
 
   const hasActiveFilters = searchTerm || statusFilter !== 'all' || dateFrom || dateTo || minAmount || maxAmount || ratingFilter !== 'all';
+
+  // Get amount label based on currency
+  const getAmountLabel = () => {
+    if (currencyTab === 'MMK') return 'ပမာဏ (MMK)';
+    if (currencyTab === 'TON') return 'ပမာဏ (TON)';
+    return 'ပမာဏ';
+  };
 
   const exportToCSV = () => {
     if (filteredTransactions.length === 0) {
@@ -241,31 +265,57 @@ export default function AdminTransactions() {
       title="ရောင်းဝယ်မှုများ" 
       subtitle="အားလုံးသော ရောင်းဝယ်မှု မှတ်တမ်းများ"
     >
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div className="flex items-center gap-4">
-            <CardTitle className="text-lg">ရောင်းဝယ်မှု စာရင်း</CardTitle>
-            <span className="text-sm text-muted-foreground">
-              ({filteredTransactions.length} ခု)
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={exportToCSV}
-              disabled={isExporting || filteredTransactions.length === 0}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              {isExporting ? 'Exporting...' : 'CSV Export'}
-            </Button>
-            <Button variant="outline" size="sm" onClick={fetchTransactions}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              ပြန်လည်ရယူ
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
+      <Tabs value={currencyTab} onValueChange={setCurrencyTab} className="space-y-6">
+        <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsTrigger value="all" className="flex items-center gap-2">
+            အားလုံး
+            <Badge variant="secondary" className="text-xs">
+              {currencyStats.allCount}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="TON" className="flex items-center gap-2">
+            💎 TON
+            {currencyStats.pendingTON > 0 && (
+              <Badge variant="destructive" className="text-xs">
+                {currencyStats.pendingTON}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="MMK" className="flex items-center gap-2">
+            💵 MMK
+            {currencyStats.pendingMMK > 0 && (
+              <Badge variant="destructive" className="text-xs">
+                {currencyStats.pendingMMK}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <div className="flex items-center gap-4">
+              <CardTitle className="text-lg">ရောင်းဝယ်မှု စာရင်း</CardTitle>
+              <span className="text-sm text-muted-foreground">
+                ({filteredTransactions.length} ခု)
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={exportToCSV}
+                disabled={isExporting || filteredTransactions.length === 0}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                {isExporting ? 'Exporting...' : 'CSV Export'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={fetchTransactions}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                ပြန်လည်ရယူ
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
           {/* Filters */}
           <div className="mb-6 space-y-4">
             {/* Row 1: Search and Status */}
@@ -358,7 +408,9 @@ export default function AdminTransactions() {
 
               {/* Amount Range */}
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">ပမာဏ:</span>
+                <span className="text-sm text-muted-foreground">
+                  {currencyTab === 'MMK' ? 'ပမာဏ (MMK):' : 'ပမာဏ (TON):'}
+                </span>
                 <Input
                   type="number"
                   placeholder="အနည်းဆုံး"
@@ -366,7 +418,7 @@ export default function AdminTransactions() {
                   onChange={(e) => setMinAmount(e.target.value)}
                   className="w-[100px] h-9"
                   min="0"
-                  step="0.01"
+                  step={currencyTab === 'MMK' ? '1000' : '0.01'}
                 />
                 <span className="text-muted-foreground">-</span>
                 <Input
@@ -376,7 +428,7 @@ export default function AdminTransactions() {
                   onChange={(e) => setMaxAmount(e.target.value)}
                   className="w-[100px] h-9"
                   min="0"
-                  step="0.01"
+                  step={currencyTab === 'MMK' ? '1000' : '0.01'}
                 />
               </div>
             </div>
@@ -429,18 +481,19 @@ export default function AdminTransactions() {
                     <TableHead>ရက်စွဲ</TableHead>
                     <TableHead>ရောင်းသူ</TableHead>
                     <TableHead>ဝယ်သူ</TableHead>
-                    <TableHead>ပမာဏ (TON)</TableHead>
+                    {currencyTab === 'all' && <TableHead>ငွေကြေး</TableHead>}
+                    <TableHead>{getAmountLabel()}</TableHead>
                     <TableHead>ကော်မရှင်</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Rating</TableHead>
-                    <TableHead>TX Hash</TableHead>
+                    {currencyTab !== 'MMK' && <TableHead>TX Hash</TableHead>}
                     <TableHead className="text-right">Link</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredTransactions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="h-24 text-center">
+                      <TableCell colSpan={currencyTab === 'all' ? 10 : currencyTab === 'MMK' ? 8 : 9} className="h-24 text-center">
                         ရောင်းဝယ်မှု မရှိပါ
                       </TableCell>
                     </TableRow>
@@ -468,7 +521,19 @@ export default function AdminTransactions() {
                               <span className="text-muted-foreground">-</span>
                             )}
                           </TableCell>
-                          <TableCell>{Number(tx.amount_ton).toFixed(4)}</TableCell>
+                          {currencyTab === 'all' && (
+                            <TableCell>
+                              <Badge variant={tx.currency === 'TON' ? 'default' : 'secondary'}>
+                                {tx.currency === 'TON' ? '💎 TON' : '💵 MMK'}
+                              </Badge>
+                            </TableCell>
+                          )}
+                          <TableCell>
+                            {tx.currency === 'MMK' 
+                              ? Number(tx.amount_mmk || 0).toLocaleString() + ' K'
+                              : Number(tx.amount_ton).toFixed(4) + ' TON'
+                            }
+                          </TableCell>
                           <TableCell>{Number(tx.commission_ton).toFixed(4)}</TableCell>
                           <TableCell>
                             <TransactionStatusBadge status={tx.status} />
@@ -489,21 +554,23 @@ export default function AdminTransactions() {
                               <span className="text-muted-foreground text-xs">-</span>
                             )}
                           </TableCell>
-                          <TableCell>
-                            {tx.ton_tx_hash ? (
-                              <a
-                                href={`https://tonscan.org/tx/${tx.ton_tx_hash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1 text-primary hover:underline"
-                              >
-                                {tx.ton_tx_hash.slice(0, 8)}...
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            ) : (
-                              <span className="text-muted-foreground">-</span>
-                            )}
-                          </TableCell>
+                          {currencyTab !== 'MMK' && (
+                            <TableCell>
+                              {tx.ton_tx_hash ? (
+                                <a
+                                  href={`https://tonscan.org/tx/${tx.ton_tx_hash}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-primary hover:underline"
+                                >
+                                  {tx.ton_tx_hash.slice(0, 8)}...
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                          )}
                           <TableCell className="text-right">
                             <code className="rounded bg-muted px-2 py-1 text-xs">
                               {tx.unique_link.slice(0, 12)}...
@@ -517,8 +584,9 @@ export default function AdminTransactions() {
               </Table>
             </div>
           )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </Tabs>
     </AdminLayout>
   );
 }
