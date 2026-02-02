@@ -16,39 +16,54 @@ export type Database = {
     Tables: {
       deposits: {
         Row: {
+          admin_approved_at: string | null
+          admin_notes: string | null
           amount_ton: number
           confirmed_at: string | null
           created_at: string
+          currency: string
           expires_at: string | null
           id: string
           is_confirmed: boolean
+          payment_method: string | null
           profile_id: string
+          screenshot_url: string | null
           status: string
           telegram_msg_id: number | null
           ton_tx_hash: string | null
           unique_code: string | null
         }
         Insert: {
+          admin_approved_at?: string | null
+          admin_notes?: string | null
           amount_ton: number
           confirmed_at?: string | null
           created_at?: string
+          currency?: string
           expires_at?: string | null
           id?: string
           is_confirmed?: boolean
+          payment_method?: string | null
           profile_id: string
+          screenshot_url?: string | null
           status?: string
           telegram_msg_id?: number | null
           ton_tx_hash?: string | null
           unique_code?: string | null
         }
         Update: {
+          admin_approved_at?: string | null
+          admin_notes?: string | null
           amount_ton?: number
           confirmed_at?: string | null
           created_at?: string
+          currency?: string
           expires_at?: string | null
           id?: string
           is_confirmed?: boolean
+          payment_method?: string | null
           profile_id?: string
+          screenshot_url?: string | null
           status?: string
           telegram_msg_id?: number | null
           ton_tx_hash?: string | null
@@ -64,9 +79,52 @@ export type Database = {
           },
         ]
       }
+      payment_methods: {
+        Row: {
+          account_info: string | null
+          code: string
+          created_at: string
+          currency: string
+          icon: string | null
+          id: string
+          instructions: string | null
+          is_active: boolean
+          name: string
+          sort_order: number | null
+          updated_at: string
+        }
+        Insert: {
+          account_info?: string | null
+          code: string
+          created_at?: string
+          currency?: string
+          icon?: string | null
+          id?: string
+          instructions?: string | null
+          is_active?: boolean
+          name: string
+          sort_order?: number | null
+          updated_at?: string
+        }
+        Update: {
+          account_info?: string | null
+          code?: string
+          created_at?: string
+          currency?: string
+          icon?: string | null
+          id?: string
+          instructions?: string | null
+          is_active?: boolean
+          name?: string
+          sort_order?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           created_at: string
+          currency: string
           description: string | null
           id: string
           is_active: boolean
@@ -78,6 +136,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          currency?: string
           description?: string | null
           id?: string
           is_active?: boolean
@@ -89,6 +148,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          currency?: string
           description?: string | null
           id?: string
           is_active?: boolean
@@ -112,11 +172,13 @@ export type Database = {
         Row: {
           avg_rating: number | null
           balance: number
+          balance_mmk: number
           blocked_at: string | null
           blocked_reason: string | null
           created_at: string
           id: string
           is_blocked: boolean
+          language: string
           referral_code: string | null
           referred_by: string | null
           telegram_id: number | null
@@ -130,11 +192,13 @@ export type Database = {
         Insert: {
           avg_rating?: number | null
           balance?: number
+          balance_mmk?: number
           blocked_at?: string | null
           blocked_reason?: string | null
           created_at?: string
           id?: string
           is_blocked?: boolean
+          language?: string
           referral_code?: string | null
           referred_by?: string | null
           telegram_id?: number | null
@@ -148,11 +212,13 @@ export type Database = {
         Update: {
           avg_rating?: number | null
           balance?: number
+          balance_mmk?: number
           blocked_at?: string | null
           blocked_reason?: string | null
           created_at?: string
           id?: string
           is_blocked?: boolean
+          language?: string
           referral_code?: string | null
           referred_by?: string | null
           telegram_id?: number | null
@@ -345,6 +411,7 @@ export type Database = {
       }
       transactions: {
         Row: {
+          amount_mmk: number | null
           amount_ton: number
           buyer_id: string | null
           buyer_msg_id: number | null
@@ -352,6 +419,7 @@ export type Database = {
           commission_ton: number
           confirmed_at: string | null
           created_at: string
+          currency: string
           expires_at: string | null
           id: string
           item_sent_at: string | null
@@ -364,6 +432,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          amount_mmk?: number | null
           amount_ton: number
           buyer_id?: string | null
           buyer_msg_id?: number | null
@@ -371,6 +440,7 @@ export type Database = {
           commission_ton: number
           confirmed_at?: string | null
           created_at?: string
+          currency?: string
           expires_at?: string | null
           id?: string
           item_sent_at?: string | null
@@ -383,6 +453,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          amount_mmk?: number | null
           amount_ton?: number
           buyer_id?: string | null
           buyer_msg_id?: number | null
@@ -390,6 +461,7 @@ export type Database = {
           commission_ton?: number
           confirmed_at?: string | null
           created_at?: string
+          currency?: string
           expires_at?: string | null
           id?: string
           item_sent_at?: string | null
@@ -481,8 +553,10 @@ export type Database = {
           admin_notes: string | null
           amount_ton: number
           created_at: string
+          currency: string
           destination_wallet: string
           id: string
+          payment_method: string | null
           processed_at: string | null
           profile_id: string
           status: Database["public"]["Enums"]["withdrawal_status"]
@@ -493,8 +567,10 @@ export type Database = {
           admin_notes?: string | null
           amount_ton: number
           created_at?: string
+          currency?: string
           destination_wallet: string
           id?: string
+          payment_method?: string | null
           processed_at?: string | null
           profile_id: string
           status?: Database["public"]["Enums"]["withdrawal_status"]
@@ -505,8 +581,10 @@ export type Database = {
           admin_notes?: string | null
           amount_ton?: number
           created_at?: string
+          currency?: string
           destination_wallet?: string
           id?: string
+          payment_method?: string | null
           processed_at?: string | null
           profile_id?: string
           status?: Database["public"]["Enums"]["withdrawal_status"]
