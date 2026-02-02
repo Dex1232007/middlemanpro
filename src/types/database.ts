@@ -60,6 +60,9 @@ export interface Withdrawal {
   admin_notes: string | null;
   created_at: string;
   processed_at: string | null;
+  currency: string;
+  payment_method: string | null;
+  telegram_msg_id: number | null;
   profile?: Profile;
 }
 
