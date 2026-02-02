@@ -3,6 +3,7 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   AreaChart, 
   Area, 
@@ -23,17 +24,23 @@ import { format, subDays, startOfDay, endOfDay, eachDayOfInterval } from 'date-f
 
 interface DailyStats {
   date: string;
-  revenue: number;
-  transactions: number;
+  revenueTON: number;
+  revenueMMK: number;
+  transactionsTON: number;
+  transactionsMMK: number;
   users: number;
 }
 
 interface SummaryStats {
-  totalRevenue: number;
-  totalTransactions: number;
+  totalRevenueTON: number;
+  totalRevenueMMK: number;
+  totalTransactionsTON: number;
+  totalTransactionsMMK: number;
   totalUsers: number;
-  revenueChange: number;
-  transactionsChange: number;
+  revenueTONChange: number;
+  revenueMMKChange: number;
+  transactionsTONChange: number;
+  transactionsMMKChange: number;
   usersChange: number;
 }
 
@@ -41,14 +48,19 @@ export default function AdminAnalytics() {
   const [isLoading, setIsLoading] = useState(true);
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
   const [summary, setSummary] = useState<SummaryStats>({
-    totalRevenue: 0,
-    totalTransactions: 0,
+    totalRevenueTON: 0,
+    totalRevenueMMK: 0,
+    totalTransactionsTON: 0,
+    totalTransactionsMMK: 0,
     totalUsers: 0,
-    revenueChange: 0,
-    transactionsChange: 0,
+    revenueTONChange: 0,
+    revenueMMKChange: 0,
+    transactionsTONChange: 0,
+    transactionsMMKChange: 0,
     usersChange: 0,
   });
   const [dateRange, setDateRange] = useState('30');
+  const [currencyTab, setCurrencyTab] = useState<'TON' | 'MMK'>('TON');
 
   useEffect(() => {
     fetchAnalytics();
@@ -65,7 +77,7 @@ export default function AdminAnalytics() {
       // Fetch completed transactions for the period
       const { data: transactions } = await supabase
         .from('transactions')
-        .select('amount_ton, commission_ton, created_at, status')
+        .select('amount_ton, amount_mmk, commission_ton, created_at, status, currency')
         .gte('created_at', startDate.toISOString())
         .lte('created_at', endDate.toISOString())
         .eq('status', 'completed');
@@ -73,7 +85,7 @@ export default function AdminAnalytics() {
       // Fetch previous period for comparison
       const { data: prevTransactions } = await supabase
         .from('transactions')
-        .select('amount_ton, commission_ton, created_at, status')
+        .select('amount_ton, amount_mmk, commission_ton, created_at, status, currency')
         .gte('created_at', previousStartDate.toISOString())
         .lt('created_at', startDate.toISOString())
         .eq('status', 'completed');
@@ -107,24 +119,34 @@ export default function AdminAnalytics() {
           return userDate >= dayStart && userDate <= dayEnd;
         }) || [];
 
-        const revenue = dayTransactions.reduce((sum, t) => sum + Number(t.commission_ton || 0), 0);
+        const tonTx = dayTransactions.filter(t => t.currency === 'TON');
+        const mmkTx = dayTransactions.filter(t => t.currency === 'MMK');
+
+        const revenueTON = tonTx.reduce((sum, t) => sum + Number(t.commission_ton || 0), 0);
+        const revenueMMK = mmkTx.reduce((sum, t) => sum + Number(t.commission_ton || 0), 0);
 
         return {
           date: format(date, 'MM/dd'),
-          revenue: Math.round(revenue * 100) / 100,
-          transactions: dayTransactions.length,
+          revenueTON: Math.round(revenueTON * 100) / 100,
+          revenueMMK: Math.round(revenueMMK * 100) / 100,
+          transactionsTON: tonTx.length,
+          transactionsMMK: mmkTx.length,
           users: dayUsers.length,
         };
       });
 
       setDailyStats(dailyData);
 
-      // Calculate summary
-      const currentRevenue = transactions?.reduce((sum, t) => sum + Number(t.commission_ton || 0), 0) || 0;
-      const prevRevenue = prevTransactions?.reduce((sum, t) => sum + Number(t.commission_ton || 0), 0) || 0;
-      
-      const currentTxCount = transactions?.length || 0;
-      const prevTxCount = prevTransactions?.length || 0;
+      // Calculate summary - separate by currency
+      const tonTx = transactions?.filter(t => t.currency === 'TON') || [];
+      const mmkTx = transactions?.filter(t => t.currency === 'MMK') || [];
+      const prevTonTx = prevTransactions?.filter(t => t.currency === 'TON') || [];
+      const prevMmkTx = prevTransactions?.filter(t => t.currency === 'MMK') || [];
+
+      const currentRevenueTON = tonTx.reduce((sum, t) => sum + Number(t.commission_ton || 0), 0);
+      const currentRevenueMMK = mmkTx.reduce((sum, t) => sum + Number(t.commission_ton || 0), 0);
+      const prevRevenueTON = prevTonTx.reduce((sum, t) => sum + Number(t.commission_ton || 0), 0);
+      const prevRevenueMMK = prevMmkTx.reduce((sum, t) => sum + Number(t.commission_ton || 0), 0);
       
       const currentUsers = users?.length || 0;
       const prevUsersCount = prevUsers?.length || 0;
@@ -135,11 +157,15 @@ export default function AdminAnalytics() {
       };
 
       setSummary({
-        totalRevenue: Math.round(currentRevenue * 100) / 100,
-        totalTransactions: currentTxCount,
+        totalRevenueTON: Math.round(currentRevenueTON * 100) / 100,
+        totalRevenueMMK: Math.round(currentRevenueMMK * 100) / 100,
+        totalTransactionsTON: tonTx.length,
+        totalTransactionsMMK: mmkTx.length,
         totalUsers: currentUsers,
-        revenueChange: calcChange(currentRevenue, prevRevenue),
-        transactionsChange: calcChange(currentTxCount, prevTxCount),
+        revenueTONChange: calcChange(currentRevenueTON, prevRevenueTON),
+        revenueMMKChange: calcChange(currentRevenueMMK, prevRevenueMMK),
+        transactionsTONChange: calcChange(tonTx.length, prevTonTx.length),
+        transactionsMMKChange: calcChange(mmkTx.length, prevMmkTx.length),
         usersChange: calcChange(currentUsers, prevUsersCount),
       });
 
@@ -170,7 +196,7 @@ export default function AdminAnalytics() {
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{value}{suffix}</div>
-        <div className={`flex items-center text-xs ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+        <div className={`flex items-center text-xs ${change >= 0 ? 'text-success' : 'text-destructive'}`}>
           {change >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
           {change >= 0 ? '+' : ''}{change}% ယခင်ကာလနှင့် နှိုင်းယှဉ်
         </div>
@@ -200,39 +226,54 @@ export default function AdminAnalytics() {
   return (
     <AdminLayout title="Analytics" subtitle="စာရင်းအင်း ခွဲခြမ်းစိတ်ဖြာမှု">
       <div className="space-y-6">
-        {/* Date Range Selector */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Calendar className="h-4 w-4" />
-            <span>လွန်ခဲ့သော {dateRange} ရက်အတွင်း</span>
+        {/* Date Range Selector & Currency Tab */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <Tabs value={currencyTab} onValueChange={(v) => setCurrencyTab(v as 'TON' | 'MMK')}>
+            <TabsList>
+              <TabsTrigger value="TON" className="flex items-center gap-2">
+                💎 TON
+              </TabsTrigger>
+              <TabsTrigger value="MMK" className="flex items-center gap-2">
+                💵 MMK
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Calendar className="h-4 w-4" />
+              <span>လွန်ခဲ့သော {dateRange} ရက်အတွင်း</span>
+            </div>
+            <Select value={dateRange} onValueChange={setDateRange}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">၇ ရက်</SelectItem>
+                <SelectItem value="14">၁၄ ရက်</SelectItem>
+                <SelectItem value="30">၃၀ ရက်</SelectItem>
+                <SelectItem value="60">၆၀ ရက်</SelectItem>
+                <SelectItem value="90">၉၀ ရက်</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-          <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">၇ ရက်</SelectItem>
-              <SelectItem value="14">၁၄ ရက်</SelectItem>
-              <SelectItem value="30">၃၀ ရက်</SelectItem>
-              <SelectItem value="60">၆၀ ရက်</SelectItem>
-              <SelectItem value="90">၉၀ ရက်</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard
-            title="စုစုပေါင်း ဝင်ငွေ (Commission)"
-            value={summary.totalRevenue.toFixed(2)}
-            change={summary.revenueChange}
+            title={`${currencyTab === 'TON' ? '💎 TON' : '💵 MMK'} ဝင်ငွေ (Commission)`}
+            value={currencyTab === 'TON' 
+              ? summary.totalRevenueTON.toFixed(2)
+              : summary.totalRevenueMMK.toLocaleString()
+            }
+            change={currencyTab === 'TON' ? summary.revenueTONChange : summary.revenueMMKChange}
             icon={Wallet}
-            suffix=" TON"
+            suffix={currencyTab === 'TON' ? ' TON' : ' K'}
           />
           <StatCard
-            title="ပြီးစီးသော အရောင်းအဝယ်"
-            value={summary.totalTransactions}
-            change={summary.transactionsChange}
+            title={`${currencyTab === 'TON' ? '💎' : '💵'} ပြီးစီးသော အရောင်းအဝယ်`}
+            value={currencyTab === 'TON' ? summary.totalTransactionsTON : summary.totalTransactionsMMK}
+            change={currencyTab === 'TON' ? summary.transactionsTONChange : summary.transactionsMMKChange}
             icon={ArrowLeftRight}
           />
           <StatCard
@@ -246,8 +287,8 @@ export default function AdminAnalytics() {
         {/* Revenue Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>💰 နေ့စဉ် Commission ဝင်ငွေ</CardTitle>
-            <CardDescription>ပြီးစီးသော အရောင်းအဝယ်များမှ ရရှိသော commission</CardDescription>
+            <CardTitle>💰 နေ့စဉ် {currencyTab} Commission ဝင်ငွေ</CardTitle>
+            <CardDescription>ပြီးစီးသော {currencyTab} အရောင်းအဝယ်များမှ ရရှိသော commission</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-80">
@@ -268,7 +309,7 @@ export default function AdminAnalytics() {
                   <YAxis 
                     className="text-xs"
                     tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                    tickFormatter={(value) => `${value} TON`}
+                    tickFormatter={(value) => currencyTab === 'TON' ? `${value} TON` : `${value} K`}
                   />
                   <Tooltip 
                     contentStyle={{ 
@@ -276,11 +317,14 @@ export default function AdminAnalytics() {
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '8px'
                     }}
-                    formatter={(value: number) => [`${value.toFixed(4)} TON`, 'Revenue']}
+                    formatter={(value: number) => [
+                      currencyTab === 'TON' ? `${value.toFixed(4)} TON` : `${value.toLocaleString()} K`, 
+                      'Revenue'
+                    ]}
                   />
                   <Area 
                     type="monotone" 
-                    dataKey="revenue" 
+                    dataKey={currencyTab === 'TON' ? 'revenueTON' : 'revenueMMK'} 
                     stroke="hsl(var(--primary))" 
                     fillOpacity={1} 
                     fill="url(#colorRevenue)" 
@@ -297,8 +341,8 @@ export default function AdminAnalytics() {
           {/* Transaction Volume */}
           <Card>
             <CardHeader>
-              <CardTitle>📊 အရောင်းအဝယ် အရေအတွက်</CardTitle>
-              <CardDescription>နေ့စဉ် ပြီးစီးသော အရောင်းအဝယ် အရေအတွက်</CardDescription>
+              <CardTitle>📊 {currencyTab} အရောင်းအဝယ် အရေအတွက်</CardTitle>
+              <CardDescription>နေ့စဉ် ပြီးစီးသော {currencyTab} အရောင်းအဝယ် အရေအတွက်</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-64">
@@ -323,7 +367,7 @@ export default function AdminAnalytics() {
                       formatter={(value: number) => [value, 'Transactions']}
                     />
                     <Bar 
-                      dataKey="transactions" 
+                      dataKey={currencyTab === 'TON' ? 'transactionsTON' : 'transactionsMMK'} 
                       fill="hsl(var(--primary))" 
                       radius={[4, 4, 0, 0]}
                     />
@@ -378,13 +422,13 @@ export default function AdminAnalytics() {
         {/* Combined Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>📈 ခြုံငုံသုံးသပ်ချက်</CardTitle>
-            <CardDescription>Revenue နှင့် Transaction Volume နှိုင်းယှဉ်ချက်</CardDescription>
+            <CardTitle>📈 ခြုံငုံသုံးသပ်ချက် - TON vs MMK</CardTitle>
+            <CardDescription>TON နှင့် MMK Transaction Volume နှိုင်းယှဉ်ချက်</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={dailyStats}>
+                <BarChart data={dailyStats}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis 
                     dataKey="date" 
@@ -392,14 +436,6 @@ export default function AdminAnalytics() {
                     tick={{ fill: 'hsl(var(--muted-foreground))' }}
                   />
                   <YAxis 
-                    yAxisId="left"
-                    className="text-xs"
-                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                    tickFormatter={(value) => `${value} TON`}
-                  />
-                  <YAxis 
-                    yAxisId="right"
-                    orientation="right"
                     className="text-xs"
                     tick={{ fill: 'hsl(var(--muted-foreground))' }}
                   />
@@ -411,25 +447,19 @@ export default function AdminAnalytics() {
                     }}
                   />
                   <Legend />
-                  <Line 
-                    yAxisId="left"
-                    type="monotone" 
-                    dataKey="revenue" 
-                    name="Revenue (TON)"
-                    stroke="hsl(var(--primary))" 
-                    strokeWidth={2}
-                    dot={false}
+                  <Bar 
+                    dataKey="transactionsTON" 
+                    name="💎 TON"
+                    fill="hsl(var(--primary))" 
+                    radius={[4, 4, 0, 0]}
                   />
-                  <Line 
-                    yAxisId="right"
-                    type="monotone" 
-                    dataKey="transactions" 
-                    name="Transactions"
-                    stroke="hsl(var(--chart-3))" 
-                    strokeWidth={2}
-                    dot={false}
+                  <Bar 
+                    dataKey="transactionsMMK" 
+                    name="💵 MMK"
+                    fill="hsl(var(--chart-2))" 
+                    radius={[4, 4, 0, 0]}
                   />
-                </LineChart>
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
