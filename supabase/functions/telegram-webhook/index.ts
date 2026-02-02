@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { mnemonicToWalletKey } from 'npm:@ton/crypto@3.3.0'
 import { WalletContractV4 } from 'npm:@ton/ton@16.1.0'
+import { t, type Language } from './translations.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +13,36 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+// ==================== PAYMENT METHODS ====================
+interface PaymentMethod {
+  id: string
+  name: string
+  code: string
+  currency: string
+  account_info: string | null
+  instructions: string | null
+  icon: string | null
+}
+
+async function getActivePaymentMethods(): Promise<PaymentMethod[]> {
+  const { data } = await supabase
+    .from('payment_methods')
+    .select('*')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+  return data || []
+}
+
+async function getPaymentMethodByCode(code: string): Promise<PaymentMethod | null> {
+  const { data } = await supabase
+    .from('payment_methods')
+    .select('*')
+    .eq('code', code)
+    .eq('is_active', true)
+    .maybeSingle()
+  return data
+}
 
 // ==================== DECRYPTION HELPER ====================
 async function decryptMnemonic(encryptedBase64: string, password: string): Promise<string> {
@@ -222,39 +253,104 @@ function generateQR(wallet: string, amount: number, comment: string): string {
 
 // ==================== KEYBOARDS ====================
 // Main Menu - Inline keyboard only (no reply keyboard)
-const mainMenu = () => ({
+const mainMenu = (lang: Language = 'my') => ({
   inline_keyboard: [
-    [{ text: '📦 Order ပြုလုပ်မည်', callback_data: 'm:sell' }, { text: '💰 ငွေသွင်း', callback_data: 'm:dep' }],
-    [{ text: '💸 ငွေထုတ်', callback_data: 'm:wd' }, { text: '💳 လက်ကျန်', callback_data: 'm:bal' }],
-    [{ text: '📋 အမှာစာများ', callback_data: 'm:ord' }, { text: '🛍️ ကျွန်ုပ်၏လင့်များ', callback_data: 'm:mylinks' }],
-    [{ text: '📜 မှတ်တမ်း', callback_data: 'm:hist' }, { text: '⭐ ကျွန်ုပ်၏အဆင့်', callback_data: 'm:rating' }],
-    [{ text: '🎁 Referral', callback_data: 'm:ref' }, { text: '❓ အကူအညီ', callback_data: 'm:help' }],
+    [{ text: t(lang, 'menu.order'), callback_data: 'm:sell' }, { text: t(lang, 'menu.deposit'), callback_data: 'm:dep' }],
+    [{ text: t(lang, 'menu.withdraw'), callback_data: 'm:wd' }, { text: t(lang, 'menu.balance'), callback_data: 'm:bal' }],
+    [{ text: t(lang, 'menu.orders'), callback_data: 'm:ord' }, { text: t(lang, 'menu.mylinks'), callback_data: 'm:mylinks' }],
+    [{ text: t(lang, 'menu.history'), callback_data: 'm:hist' }, { text: t(lang, 'menu.rating'), callback_data: 'm:rating' }],
+    [{ text: t(lang, 'menu.referral'), callback_data: 'm:ref' }, { text: t(lang, 'menu.language'), callback_data: 'm:lang' }],
+    [{ text: t(lang, 'menu.help'), callback_data: 'm:help' }],
     [{ text: '📢 Official Channel', url: 'https://t.me/middleman_offical' }],
   ],
 })
 
-const backBtn = () => ({ inline_keyboard: [[{ text: '🏠 ပင်မစာမျက်နှာ', callback_data: 'm:home' }]] })
-const cancelBtn = () => ({ inline_keyboard: [[{ text: '❌ ပယ်ဖျက်', callback_data: 'm:home' }]] })
+const backBtn = (lang: Language = 'my') => ({ inline_keyboard: [[{ text: t(lang, 'menu.home'), callback_data: 'm:home' }]] })
+const cancelBtn = (lang: Language = 'my') => ({ inline_keyboard: [[{ text: t(lang, 'menu.cancel'), callback_data: 'm:home' }]] })
 
-const depositAmounts = () => ({
+// Deposit payment method selection
+const depositMethodBtn = (lang: Language = 'my') => ({
   inline_keyboard: [
-    [{ text: '1 TON', callback_data: 'd:1' }, { text: '5 TON', callback_data: 'd:5' }, { text: '10 TON', callback_data: 'd:10' }],
-    [{ text: '25 TON', callback_data: 'd:25' }, { text: '50 TON', callback_data: 'd:50' }, { text: '100 TON', callback_data: 'd:100' }],
-    [{ text: '💰 စိတ်ကြိုက်ပမာဏ', callback_data: 'd:custom' }],
-    [{ text: '🏠 ပင်မစာမျက်နှာ', callback_data: 'm:home' }],
+    [{ text: t(lang, 'deposit.ton_auto'), callback_data: 'dpm:TON' }],
+    [{ text: t(lang, 'deposit.kbzpay'), callback_data: 'dpm:KBZPAY' }],
+    [{ text: t(lang, 'deposit.wavepay'), callback_data: 'dpm:WAVEPAY' }],
+    [{ text: t(lang, 'menu.home'), callback_data: 'm:home' }],
   ],
 })
 
-const withdrawAmounts = (balance: number) => {
+// TON deposit amounts
+const depositAmountsTON = (lang: Language = 'my') => ({
+  inline_keyboard: [
+    [{ text: '1 TON', callback_data: 'dt:1' }, { text: '5 TON', callback_data: 'dt:5' }, { text: '10 TON', callback_data: 'dt:10' }],
+    [{ text: '25 TON', callback_data: 'dt:25' }, { text: '50 TON', callback_data: 'dt:50' }, { text: '100 TON', callback_data: 'dt:100' }],
+    [{ text: t(lang, 'deposit.custom'), callback_data: 'dt:custom' }],
+    [{ text: t(lang, 'menu.back'), callback_data: 'm:dep' }],
+  ],
+})
+
+// MMK deposit amounts (KBZPay/WavePay)
+const depositAmountsMMK = (lang: Language = 'my') => ({
+  inline_keyboard: [
+    [{ text: '5,000 MMK', callback_data: 'dm:5000' }, { text: '10,000 MMK', callback_data: 'dm:10000' }, { text: '20,000 MMK', callback_data: 'dm:20000' }],
+    [{ text: '50,000 MMK', callback_data: 'dm:50000' }, { text: '100,000 MMK', callback_data: 'dm:100000' }, { text: '200,000 MMK', callback_data: 'dm:200000' }],
+    [{ text: t(lang, 'deposit.custom'), callback_data: 'dm:custom' }],
+    [{ text: t(lang, 'menu.back'), callback_data: 'm:dep' }],
+  ],
+})
+
+// Withdraw currency selection
+const withdrawCurrencyBtn = (balanceTon: number, balanceMmk: number, lang: Language = 'my') => ({
+  inline_keyboard: [
+    ...(balanceTon > 0 ? [[{ text: `💎 TON (${balanceTon.toFixed(2)})`, callback_data: 'wc:TON' }]] : []),
+    ...(balanceMmk > 0 ? [[{ text: `💵 MMK (${balanceMmk.toLocaleString()})`, callback_data: 'wc:MMK' }]] : []),
+    [{ text: t(lang, 'menu.home'), callback_data: 'm:home' }],
+  ],
+})
+
+// TON withdraw amounts
+const withdrawAmountsTON = (balance: number, lang: Language = 'my') => {
   const amounts = [1, 5, 10, 25, 50].filter(a => a <= balance)
-  const buttons = amounts.map(a => ({ text: `${a} TON`, callback_data: `w:${a}` }))
+  const buttons = amounts.map(a => ({ text: `${a} TON`, callback_data: `wt:${a}` }))
   const rows = []
   for (let i = 0; i < buttons.length; i += 3) rows.push(buttons.slice(i, i + 3))
-  if (balance > 0) rows.push([{ text: `💰 အားလုံး (${balance.toFixed(2)} TON)`, callback_data: `w:${balance}` }])
-  rows.push([{ text: '✏️ စိတ်ကြိုက်ပမာဏ', callback_data: 'w:custom' }])
-  rows.push([{ text: '🏠 ပင်မစာမျက်နှာ', callback_data: 'm:home' }])
+  if (balance > 0) rows.push([{ text: `${t(lang, 'withdraw.all')} (${balance.toFixed(2)} TON)`, callback_data: `wt:${balance}` }])
+  rows.push([{ text: t(lang, 'withdraw.custom'), callback_data: 'wt:custom' }])
+  rows.push([{ text: t(lang, 'menu.back'), callback_data: 'm:wd' }])
   return { inline_keyboard: rows }
 }
+
+// MMK withdraw amounts
+const withdrawAmountsMMK = (balance: number, lang: Language = 'my') => {
+  const amounts = [5000, 10000, 20000, 50000, 100000].filter(a => a <= balance)
+  const buttons = amounts.map(a => ({ text: `${a.toLocaleString()} MMK`, callback_data: `wm:${a}` }))
+  const rows = []
+  for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2))
+  if (balance > 0) rows.push([{ text: `${t(lang, 'withdraw.all')} (${balance.toLocaleString()} MMK)`, callback_data: `wm:${balance}` }])
+  rows.push([{ text: t(lang, 'withdraw.custom'), callback_data: 'wm:custom' }])
+  rows.push([{ text: t(lang, 'menu.back'), callback_data: 'm:wd' }])
+  return { inline_keyboard: rows }
+}
+
+// MMK withdraw method selection
+const withdrawMethodMMK = (lang: Language = 'my') => ({
+  inline_keyboard: [
+    [{ text: '📱 KBZPay', callback_data: 'wmm:KBZPAY' }],
+    [{ text: '📲 WavePay', callback_data: 'wmm:WAVEPAY' }],
+    [{ text: t(lang, 'menu.back'), callback_data: 'wc:MMK' }],
+  ],
+})
+
+// Language selection
+const languageBtn = (currentLang: Language = 'my') => ({
+  inline_keyboard: [
+    [{ text: `🇲🇲 မြန်မာ ${currentLang === 'my' ? '✓' : ''}`, callback_data: 'lang:my' }],
+    [{ text: `🇺🇸 English ${currentLang === 'en' ? '✓' : ''}`, callback_data: 'lang:en' }],
+    [{ text: t(currentLang, 'menu.home'), callback_data: 'm:home' }],
+  ],
+})
+
+// Legacy TON-only amounts (keep for compatibility)
+const withdrawAmounts = (balance: number, lang: Language = 'my') => withdrawAmountsTON(balance, lang)
 
 const sellerBtns = (txId: string, buyerUsername?: string) => ({
   inline_keyboard: [
@@ -597,7 +693,11 @@ async function deleteUserState(telegramId: number): Promise<void> {
 // ==================== MENU HANDLERS ====================
 async function showHome(chatId: number, msgId?: number, username?: string) {
   const profile = await getProfile(chatId, username)
-  const text = `🎉 *ကြိုဆိုပါသည်!*
+  const lang = (profile.language || 'my') as Language
+  const balanceTon = Number(profile.balance)
+  const balanceMmk = Number(profile.balance_mmk || 0)
+  
+  const text = `${t(lang, 'welcome.title')}
 
 ╔══════════════════════════════╗
 ║                              ║
@@ -607,28 +707,28 @@ async function showHome(chatId: number, msgId?: number, username?: string) {
 ╚══════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-💳 *လက်ကျန်:* ${Number(profile.balance).toFixed(2)} TON
+💎 *TON:* ${balanceTon.toFixed(2)}
+💵 *MMK:* ${balanceMmk.toLocaleString()}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🔐 TON ဖြင့် လုံခြုံစွာ ရောင်းဝယ်ပါ
+${t(lang, 'welcome.tagline')}
 
-✨ *အထူးအချက်များ:*
-• 💰 ငွေသွင်း - Auto Credit
-• 💸 ငွေထုတ် - Instant Send
+✨ *${lang === 'en' ? 'Features' : 'အထူးအချက်များ'}:*
+• 💰 ${lang === 'en' ? 'Deposit - Auto Credit' : 'ငွေသွင်း - Auto Credit'}
+• 💸 ${lang === 'en' ? 'Withdraw - Instant Send' : 'ငွေထုတ် - Instant Send'}
 • 🛡️ Escrow - 100% Safe
 • ⭐ Rating System`
 
   await deleteUserState(chatId)
   
   if (msgId) {
-    // Try editText first, if fails (photo message), delete and send new message
-    const edited = await editText(chatId, msgId, text, mainMenu())
+    const edited = await editText(chatId, msgId, text, mainMenu(lang))
     if (!edited) {
       await deleteMsg(chatId, msgId)
-      await sendMessage(chatId, text, mainMenu())
+      await sendMessage(chatId, text, mainMenu(lang))
     }
   } else {
-    await sendMessage(chatId, text, mainMenu())
+    await sendMessage(chatId, text, mainMenu(lang))
   }
 }
 
@@ -776,7 +876,11 @@ async function showReferral(chatId: number, msgId: number, username?: string) {
 
 async function showBalance(chatId: number, msgId: number, username?: string) {
   const profile = await getProfile(chatId, username)
-  const text = `💳 *လက်ကျန်ငွေ*
+  const lang = (profile.language || 'my') as Language
+  const balanceTon = Number(profile.balance)
+  const balanceMmk = Number(profile.balance_mmk || 0)
+  
+  const text = `${t(lang, 'balance.title')}
 
 ╔══════════════════════════════╗
 ║                              ║
@@ -785,26 +889,24 @@ async function showBalance(chatId: number, msgId: number, username?: string) {
 ╚══════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-💳 *${Number(profile.balance).toFixed(2)} TON*
+💎 *TON:* ${balanceTon.toFixed(4)}
+💵 *MMK:* ${balanceMmk.toLocaleString()} Ks
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📥 *ငွေသွင်း:*
-• "💰 ငွေသွင်း" နှိပ်ပါ
-• ပမာဏရွေးပြီး QR Scan လုပ်ပါ
-• ငွေလွှဲပြီး Auto Credit ရရှိမည်
+📥 *${lang === 'en' ? 'Deposit' : 'ငွေသွင်း'}:*
+• TON - Auto Credit (QR Scan)
+• KBZPay/WavePay - Manual (Admin စစ်ဆေး)
 
-📤 *ငွေထုတ်:*
-• "💸 ငွေထုတ်" နှိပ်ပါ
-• ပမာဏရွေးပြီး Wallet ထည့်ပါ
-• Auto/Manual ဖြင့် ငွေရရှိမည်
+📤 *${lang === 'en' ? 'Withdraw' : 'ငွေထုတ်'}:*
+• TON - Wallet သို့ Auto Send
+• MMK - KBZPay/WavePay သို့ Manual
 
-💡 *မှတ်ချက်:* ငွေထုတ်ယူသောအခါ
-   Commission ဖြတ်ပါမည်`
+💡 *${lang === 'en' ? 'Note' : 'မှတ်ချက်'}:* ${lang === 'en' ? 'Commission applies to withdrawals' : 'ငွေထုတ်ယူသောအခါ Commission ဖြတ်ပါမည်'}`
   
-  const edited = await editText(chatId, msgId, text, backBtn())
+  const edited = await editText(chatId, msgId, text, backBtn(lang))
   if (!edited) {
     await deleteMsg(chatId, msgId)
-    await sendMessage(chatId, text, backBtn())
+    await sendMessage(chatId, text, backBtn(lang))
   }
 }
 
@@ -827,22 +929,81 @@ async function showSellPrompt(chatId: number, msgId: number) {
   }
 }
 
-async function showDepositOptions(chatId: number, msgId: number) {
-  await setUserState(chatId, { action: 'dep_select', msgId })
-  const text = `💰 *ငွေသွင်းရန်*
+async function showDepositOptions(chatId: number, msgId: number, username?: string) {
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
+  
+  await setUserState(chatId, { action: 'dep_method_select', msgId })
+  const text = `${t(lang, 'deposit.title')}
+
+╔══════════════════════════════╗
+║                              ║
+║     💰 *DEPOSIT*             ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${t(lang, 'deposit.select_method')}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💎 *TON* - Auto Credit (Blockchain)
+📱 *KBZPay/WavePay* - Manual (Admin စစ်ဆေးပေးမည်)`
+  
+  const edited = await editText(chatId, msgId, text, depositMethodBtn(lang))
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    const newMsg = await sendMessage(chatId, text, depositMethodBtn(lang))
+    if (newMsg) await setUserState(chatId, { action: 'dep_method_select', msgId: newMsg })
+  }
+}
+
+// Show TON deposit amount selection
+async function showDepositTONAmounts(chatId: number, msgId: number, username?: string) {
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
+  
+  await setUserState(chatId, { action: 'dep_ton_amount', msgId, data: { currency: 'TON' } })
+  const text = `💎 *TON ငွေသွင်းရန်*
 
 ━━━━━━━━━━━━━━━
-သွင်းလိုသော ပမာဏ ရွေးပါ:
+${t(lang, 'deposit.select_amount')}
 ━━━━━━━━━━━━━━━
 
 ✨ QR Scan ပြီး ငွေပေးပို့ပါ
-💫 အလိုအလျောက် Credit ပေးပါမည်`
+💫 ${t(lang, 'deposit.auto_credit')}`
   
-  const edited = await editText(chatId, msgId, text, depositAmounts())
+  const edited = await editText(chatId, msgId, text, depositAmountsTON(lang))
   if (!edited) {
     await deleteMsg(chatId, msgId)
-    const newMsg = await sendMessage(chatId, text, depositAmounts())
-    if (newMsg) await setUserState(chatId, { action: 'dep_select', msgId: newMsg })
+    const newMsg = await sendMessage(chatId, text, depositAmountsTON(lang))
+    if (newMsg) await setUserState(chatId, { action: 'dep_ton_amount', msgId: newMsg, data: { currency: 'TON' } })
+  }
+}
+
+// Show MMK deposit amount selection
+async function showDepositMMKAmounts(chatId: number, msgId: number, paymentMethod: string, username?: string) {
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
+  
+  const methodName = paymentMethod === 'KBZPAY' ? 'KBZPay' : 'WavePay'
+  const methodIcon = paymentMethod === 'KBZPAY' ? '📱' : '📲'
+  
+  await setUserState(chatId, { action: 'dep_mmk_amount', msgId, data: { currency: 'MMK', paymentMethod } })
+  const text = `${methodIcon} *${methodName} ငွေသွင်းရန်*
+
+━━━━━━━━━━━━━━━
+${t(lang, 'deposit.select_amount')}
+━━━━━━━━━━━━━━━
+
+📱 ${t(lang, 'deposit.mmk_step1')}
+📸 ${t(lang, 'deposit.mmk_step2')}
+⏳ ${t(lang, 'deposit.mmk_pending')}`
+  
+  const edited = await editText(chatId, msgId, text, depositAmountsMMK(lang))
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    const newMsg = await sendMessage(chatId, text, depositAmountsMMK(lang))
+    if (newMsg) await setUserState(chatId, { action: 'dep_mmk_amount', msgId: newMsg, data: { currency: 'MMK', paymentMethod } })
   }
 }
 
@@ -901,26 +1062,24 @@ async function showDepositQR(chatId: number, msgId: number, amount: number, user
 
 async function showWithdrawOptions(chatId: number, msgId: number, username?: string) {
   const profile = await getProfile(chatId, username)
-  const balance = Number(profile.balance)
+  const lang = (profile.language || 'my') as Language
+  const balanceTon = Number(profile.balance)
+  const balanceMmk = Number(profile.balance_mmk || 0)
   
-  // Get commission rate for withdrawal fee display
-  const { data: commSetting } = await supabase.from('settings').select('value').eq('key', 'commission_rate').single()
-  const commRate = commSetting ? parseFloat(commSetting.value) : 5
-  
-  if (balance <= 0) {
-    const noBalanceText = `❌ *လက်ကျန်ငွေ မရှိပါ*
+  if (balanceTon <= 0 && balanceMmk <= 0) {
+    const noBalanceText = `❌ *${lang === 'en' ? 'No balance available' : 'လက်ကျန်ငွေ မရှိပါ'}*
 
-ငွေသွင်းရန် "ငွေသွင်း" ကို နှိပ်ပါ`
-    const edited = await editText(chatId, msgId, noBalanceText, backBtn())
+${lang === 'en' ? 'Please deposit first' : 'ငွေသွင်းရန် "ငွေသွင်း" ကို နှိပ်ပါ'}`
+    const edited = await editText(chatId, msgId, noBalanceText, backBtn(lang))
     if (!edited) {
       await deleteMsg(chatId, msgId)
-      await sendMessage(chatId, noBalanceText, backBtn())
+      await sendMessage(chatId, noBalanceText, backBtn(lang))
     }
     return
   }
   
-  await setUserState(chatId, { action: 'wd_select', msgId, data: { balance, commRate } })
-  const text = `💸 *ငွေထုတ်ရန်*
+  await setUserState(chatId, { action: 'wd_currency_select', msgId, data: { balanceTon, balanceMmk } })
+  const text = `${t(lang, 'withdraw.title')}
 
 ╔══════════════════════════════╗
 ║                              ║
@@ -929,19 +1088,236 @@ async function showWithdrawOptions(chatId: number, msgId: number, username?: str
 ╚══════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-💳 *လက်ကျန်:* ${balance.toFixed(2)} TON
+💎 *TON:* ${balanceTon.toFixed(2)}
+💵 *MMK:* ${balanceMmk.toLocaleString()} Ks
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${t(lang, 'withdraw.select_currency')}`
+  
+  const edited = await editText(chatId, msgId, text, withdrawCurrencyBtn(balanceTon, balanceMmk, lang))
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    const newMsg = await sendMessage(chatId, text, withdrawCurrencyBtn(balanceTon, balanceMmk, lang))
+    if (newMsg) await setUserState(chatId, { action: 'wd_currency_select', msgId: newMsg, data: { balanceTon, balanceMmk } })
+  }
+}
+
+// Show TON withdrawal amounts
+async function showWithdrawTONAmounts(chatId: number, msgId: number, username?: string) {
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
+  const balance = Number(profile.balance)
+  
+  const { data: commSetting } = await supabase.from('settings').select('value').eq('key', 'commission_rate').maybeSingle()
+  const commRate = commSetting ? parseFloat(commSetting.value) : 5
+  
+  await setUserState(chatId, { action: 'wt_amount', msgId, data: { balance, commRate, currency: 'TON' } })
+  const text = `💎 *TON ${lang === 'en' ? 'Withdrawal' : 'ငွေထုတ်ရန်'}*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💳 *${lang === 'en' ? 'Balance' : 'လက်ကျန်'}:* ${balance.toFixed(4)} TON
 💰 *Commission:* ${commRate}%
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📤 ထုတ်ယူလိုသော ပမာဏ ရွေးပါ:
-
-⚠️ *မှတ်ချက်:* ငွေထုတ်ယူသောအခါ ${commRate}% commission ဖြတ်ပါမည်`
+${t(lang, 'withdraw.select_amount')}`
   
-  const edited = await editText(chatId, msgId, text, withdrawAmounts(balance))
+  const edited = await editText(chatId, msgId, text, withdrawAmountsTON(balance, lang))
   if (!edited) {
     await deleteMsg(chatId, msgId)
-    const newMsg = await sendMessage(chatId, text, withdrawAmounts(balance))
-    if (newMsg) await setUserState(chatId, { action: 'wd_select', msgId: newMsg, data: { balance, commRate } })
+    const newMsg = await sendMessage(chatId, text, withdrawAmountsTON(balance, lang))
+    if (newMsg) await setUserState(chatId, { action: 'wt_amount', msgId: newMsg, data: { balance, commRate, currency: 'TON' } })
+  }
+}
+
+// Show MMK withdrawal amounts
+async function showWithdrawMMKAmounts(chatId: number, msgId: number, username?: string) {
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
+  const balance = Number(profile.balance_mmk || 0)
+  
+  const { data: commSetting } = await supabase.from('settings').select('value').eq('key', 'commission_rate').maybeSingle()
+  const commRate = commSetting ? parseFloat(commSetting.value) : 5
+  
+  await setUserState(chatId, { action: 'wm_amount', msgId, data: { balance, commRate, currency: 'MMK' } })
+  const text = `💵 *MMK ${lang === 'en' ? 'Withdrawal' : 'ငွေထုတ်ရန်'}*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💳 *${lang === 'en' ? 'Balance' : 'လက်ကျန်'}:* ${balance.toLocaleString()} MMK
+💰 *Commission:* ${commRate}%
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${t(lang, 'withdraw.select_amount')}`
+  
+  const edited = await editText(chatId, msgId, text, withdrawAmountsMMK(balance, lang))
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    const newMsg = await sendMessage(chatId, text, withdrawAmountsMMK(balance, lang))
+    if (newMsg) await setUserState(chatId, { action: 'wm_amount', msgId: newMsg, data: { balance, commRate, currency: 'MMK' } })
+  }
+}
+
+// Show MMK withdraw method selection
+async function showWithdrawMMKMethod(chatId: number, msgId: number, amount: number, username?: string) {
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
+  
+  const { data: commSetting } = await supabase.from('settings').select('value').eq('key', 'commission_rate').maybeSingle()
+  const commRate = commSetting ? parseFloat(commSetting.value) : 5
+  const fee = Math.round(amount * commRate / 100)
+  const receiveAmount = amount - fee
+  
+  await setUserState(chatId, { action: 'wm_method', msgId, data: { amount, fee, receiveAmount, currency: 'MMK' } })
+  const text = `💵 *MMK ${lang === 'en' ? 'Withdrawal' : 'ငွေထုတ်ရန်'}*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *${lang === 'en' ? 'Amount' : 'ထုတ်ယူမည်'}:* ${amount.toLocaleString()} MMK
+📊 *Commission (${commRate}%):* -${fee.toLocaleString()} MMK
+✅ *${lang === 'en' ? 'You receive' : 'လက်ခံရရှိမည်'}:* ${receiveAmount.toLocaleString()} MMK
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${t(lang, 'withdraw.select_method')}`
+  
+  const edited = await editText(chatId, msgId, text, withdrawMethodMMK(lang))
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    const newMsg = await sendMessage(chatId, text, withdrawMethodMMK(lang))
+    if (newMsg) await setUserState(chatId, { action: 'wm_method', msgId: newMsg, data: { amount, fee, receiveAmount, currency: 'MMK' } })
+  }
+}
+
+// Show language selection
+async function showLanguageSelect(chatId: number, msgId: number, username?: string) {
+  const profile = await getProfile(chatId, username)
+  const currentLang = (profile.language || 'my') as Language
+  
+  const text = `${t(currentLang, 'lang.title')}
+
+╔══════════════════════════════╗
+║                              ║
+║     🌐 *LANGUAGE*            ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${t(currentLang, 'lang.current')} ${currentLang === 'my' ? '🇲🇲 မြန်မာ' : '🇺🇸 English'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${currentLang === 'en' ? 'Select your preferred language:' : 'သင်နှစ်သက်ရာ ဘာသာစကား ရွေးပါ:'}`
+  
+  const edited = await editText(chatId, msgId, text, languageBtn(currentLang))
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    await sendMessage(chatId, text, languageBtn(currentLang))
+  }
+}
+
+// Show MMK deposit instructions (KBZPay/WavePay)
+async function showDepositMMKInstructions(chatId: number, msgId: number, amount: number, paymentMethod: string, username?: string) {
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
+  
+  // Get payment account info from settings
+  const settingKey = paymentMethod === 'KBZPAY' ? 'kbzpay_account' : 'wavepay_account'
+  const { data: accountSetting } = await supabase.from('settings').select('value').eq('key', settingKey).maybeSingle()
+  const accountInfo = accountSetting?.value || (lang === 'en' ? 'Not configured' : 'မသတ်မှတ်ရသေးပါ')
+  
+  const methodName = paymentMethod === 'KBZPAY' ? 'KBZPay' : 'WavePay'
+  const methodIcon = paymentMethod === 'KBZPAY' ? '📱' : '📲'
+  
+  // Generate unique deposit code
+  const uniqueCode = crypto.randomUUID().replace(/-/g, '').substring(0, 6).toUpperCase()
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hour expiry for manual
+  
+  await deleteMsg(chatId, msgId)
+  
+  const text = `${methodIcon} *${methodName} ငွေသွင်း*
+
+╔══════════════════════════════╗
+║                              ║
+║     💵 *DEPOSIT MMK*         ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *${lang === 'en' ? 'Amount' : 'ပမာဏ'}:* ${amount.toLocaleString()} MMK
+🔑 *Code:* \`${uniqueCode}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📱 *${lang === 'en' ? 'Transfer to' : 'ငွေလွှဲရန်'}:*
+\`${accountInfo}\`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 *${lang === 'en' ? 'Instructions' : 'လုပ်ဆောင်ရန်'}:*
+1️⃣ ${lang === 'en' ? 'Transfer to above account' : 'အထက်ပါ Account သို့ ငွေလွှဲပါ'}
+2️⃣ ${lang === 'en' ? 'Include code in note/memo' : 'Note/Memo တွင် Code ထည့်ပါ'}
+3️⃣ ${lang === 'en' ? 'Send screenshot here' : 'Screenshot ကို ဤနေရာမှ ပို့ပါ'}
+
+⏳ *${lang === 'en' ? 'Admin will verify and credit' : 'Admin စစ်ဆေးပြီး Credit ပေးပါမည်'}*
+⏰ *${lang === 'en' ? 'Expires in 1 hour' : 'သက်တမ်း: ၁ နာရီ'}*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📸 *${lang === 'en' ? 'Send payment screenshot now' : 'ငွေလွှဲပြီး Screenshot ပို့ပါ'}:*`
+
+  const newMsgId = await sendMessage(chatId, text, cancelBtn(lang))
+  
+  // Save pending MMK deposit
+  await supabase.from('deposits').insert({
+    profile_id: profile.id,
+    amount_ton: amount, // Using amount_ton field but it's actually MMK
+    currency: 'MMK',
+    payment_method: paymentMethod,
+    is_confirmed: false,
+    unique_code: uniqueCode,
+    expires_at: expiresAt.toISOString(),
+    status: 'pending',
+    telegram_msg_id: newMsgId,
+  })
+  
+  // Set state to wait for screenshot
+  await setUserState(chatId, { action: 'dep_mmk_screenshot', msgId: newMsgId || undefined, data: { amount, paymentMethod, uniqueCode } })
+}
+
+// Show MMK withdraw phone prompt
+async function showWithdrawMMKPhonePrompt(chatId: number, msgId: number, amount: number, paymentMethod: string, username?: string) {
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
+  
+  const { data: commSetting } = await supabase.from('settings').select('value').eq('key', 'commission_rate').maybeSingle()
+  const commRate = commSetting ? parseFloat(commSetting.value) : 5
+  const fee = Math.round(amount * commRate / 100)
+  const receiveAmount = amount - fee
+  
+  const methodName = paymentMethod === 'KBZPAY' ? 'KBZPay' : 'WavePay'
+  const methodIcon = paymentMethod === 'KBZPAY' ? '📱' : '📲'
+  
+  await setUserState(chatId, { action: 'wm_phone', msgId, data: { amount, fee, receiveAmount, currency: 'MMK', paymentMethod } })
+  
+  const text = `${methodIcon} *${methodName} ${lang === 'en' ? 'Withdrawal' : 'ငွေထုတ်ရန်'}*
+
+╔══════════════════════════════╗
+║                              ║
+║   📱 *ENTER PHONE*           ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *${lang === 'en' ? 'Amount' : 'ထုတ်ယူမည်'}:* ${amount.toLocaleString()} MMK
+📊 *Commission (${commRate}%):* -${fee.toLocaleString()} MMK
+✅ *${lang === 'en' ? 'You receive' : 'လက်ခံရရှိမည်'}:* ${receiveAmount.toLocaleString()} MMK
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📱 *${lang === 'en' ? 'Enter phone number' : 'ဖုန်းနံပါတ် ထည့်ပါ'}:*
+
+${lang === 'en' ? 'Example' : 'ဥပမာ'}: \`09xxxxxxxxx\`
+
+⚠️ *${lang === 'en' ? 'Verify number is correct' : 'ဖုန်းနံပါတ် မှန်ကန်ရန် စစ်ဆေးပါ'}*`
+  
+  const edited = await editText(chatId, msgId, text, cancelBtn(lang))
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    const newMsg = await sendMessage(chatId, text, cancelBtn(lang))
+    if (newMsg) await setUserState(chatId, { action: 'wm_phone', msgId: newMsg, data: { amount, fee, receiveAmount, currency: 'MMK', paymentMethod } })
   }
 }
 
@@ -2747,7 +3123,7 @@ async function handleCallback(cb: { id: string; from: { id: number; username?: s
     switch (action) {
       case 'home': await showHome(chatId, msgId, username); break
       case 'sell': await showSellPrompt(chatId, msgId); break
-      case 'dep': await showDepositOptions(chatId, msgId); break
+      case 'dep': await showDepositOptions(chatId, msgId, username); break
       case 'wd': await showWithdrawOptions(chatId, msgId, username); break
       case 'bal': await showBalance(chatId, msgId, username); break
       case 'ord': await showOrders(chatId, msgId, username); break
@@ -2756,15 +3132,149 @@ async function handleCallback(cb: { id: string; from: { id: number; username?: s
       case 'rating': await showMyRating(chatId, msgId, username); break
       case 'ref': await showReferral(chatId, msgId, username); break
       case 'help': await showHelp(chatId, msgId); break
+      case 'lang': await showLanguageSelect(chatId, msgId, username); break
     }
     return
   }
 
-  // Deposit
+  // Language selection
+  if (type === 'lang') {
+    await answerCb(cb.id)
+    const newLang = action as Language
+    if (newLang === 'my' || newLang === 'en') {
+      const profile = await getProfile(telegramId, username)
+      await supabase.from('profiles').update({ language: newLang }).eq('id', profile.id)
+      await sendMessage(chatId, t(newLang, 'lang.changed'))
+      await showHome(chatId, msgId, username)
+    }
+    return
+  }
+
+  // Deposit payment method selection
+  if (type === 'dpm') {
+    await answerCb(cb.id)
+    const method = action // TON, KBZPAY, WAVEPAY
+    if (method === 'TON') {
+      await showDepositTONAmounts(chatId, msgId, username)
+    } else {
+      await showDepositMMKAmounts(chatId, msgId, method, username)
+    }
+    return
+  }
+
+  // TON deposit amounts
+  if (type === 'dt') {
+    await answerCb(cb.id)
+    if (action === 'custom') {
+      await setUserState(chatId, { action: 'dep_ton_custom', msgId, data: { currency: 'TON' } })
+      await editText(chatId, msgId, `💎 *TON စိတ်ကြိုက် ပမာဏ*
+
+သွင်းလိုသော TON ပမာဏ ရိုက်ထည့်ပါ:
+ဥပမာ: \`25.5\``, cancelBtn())
+    } else {
+      const amt = parseFloat(action)
+      if (!isNaN(amt)) await showDepositQR(chatId, msgId, amt, username)
+    }
+    return
+  }
+
+  // MMK deposit amounts
+  if (type === 'dm') {
+    await answerCb(cb.id)
+    const state = await getUserState(chatId)
+    const paymentMethod = state?.data?.paymentMethod || 'KBZPAY'
+    
+    if (action === 'custom') {
+      await setUserState(chatId, { action: 'dep_mmk_custom', msgId, data: { currency: 'MMK', paymentMethod } })
+      await editText(chatId, msgId, `💵 *MMK စိတ်ကြိုက် ပမာဏ*
+
+သွင်းလိုသော MMK ပမာဏ ရိုက်ထည့်ပါ:
+ဥပမာ: \`50000\``, cancelBtn())
+    } else {
+      const amt = parseInt(action)
+      if (!isNaN(amt)) await showDepositMMKInstructions(chatId, msgId, amt, paymentMethod as string, username)
+    }
+    return
+  }
+
+  // Withdraw currency selection
+  if (type === 'wc') {
+    await answerCb(cb.id)
+    if (action === 'TON') {
+      await showWithdrawTONAmounts(chatId, msgId, username)
+    } else if (action === 'MMK') {
+      await showWithdrawMMKAmounts(chatId, msgId, username)
+    }
+    return
+  }
+
+  // TON withdraw amounts
+  if (type === 'wt') {
+    await answerCb(cb.id)
+    if (action === 'custom') {
+      const profile = await getProfile(telegramId, username)
+      const balance = Number(profile.balance)
+      const { data: commSetting } = await supabase.from('settings').select('value').eq('key', 'commission_rate').maybeSingle()
+      const commRate = commSetting ? parseFloat(commSetting.value) : 5
+      
+      await setUserState(chatId, { action: 'wt_custom', msgId, data: { balance, commRate, currency: 'TON' } })
+      await editText(chatId, msgId, `💎 *TON စိတ်ကြိုက် ပမာဏ*
+
+━━━━━━━━━━━━━━━
+💳 လက်ကျန်: *${balance.toFixed(4)} TON*
+💰 Commission: *${commRate}%*
+━━━━━━━━━━━━━━━
+
+ထုတ်ယူလိုသော TON ပမာဏ ရိုက်ထည့်ပါ:`, cancelBtn())
+    } else {
+      const amt = parseFloat(action)
+      if (!isNaN(amt)) await showWithdrawWalletPrompt(chatId, msgId, amt)
+    }
+    return
+  }
+
+  // MMK withdraw amounts
+  if (type === 'wm') {
+    await answerCb(cb.id)
+    if (action === 'custom') {
+      const profile = await getProfile(telegramId, username)
+      const balance = Number(profile.balance_mmk || 0)
+      const { data: commSetting } = await supabase.from('settings').select('value').eq('key', 'commission_rate').maybeSingle()
+      const commRate = commSetting ? parseFloat(commSetting.value) : 5
+      
+      await setUserState(chatId, { action: 'wm_custom', msgId, data: { balance, commRate, currency: 'MMK' } })
+      await editText(chatId, msgId, `💵 *MMK စိတ်ကြိုက် ပမာဏ*
+
+━━━━━━━━━━━━━━━
+💳 လက်ကျန်: *${balance.toLocaleString()} MMK*
+💰 Commission: *${commRate}%*
+━━━━━━━━━━━━━━━
+
+ထုတ်ယူလိုသော MMK ပမာဏ ရိုက်ထည့်ပါ:`, cancelBtn())
+    } else {
+      const amt = parseInt(action)
+      if (!isNaN(amt)) await showWithdrawMMKMethod(chatId, msgId, amt, username)
+    }
+    return
+  }
+
+  // MMK withdraw method selection
+  if (type === 'wmm') {
+    await answerCb(cb.id)
+    const state = await getUserState(chatId)
+    const amount = Number(state?.data?.amount) || 0
+    const fee = Number(state?.data?.fee) || 0
+    const receiveAmount = Number(state?.data?.receiveAmount) || 0
+    
+    await showWithdrawMMKPhonePrompt(chatId, msgId, amount, action, username)
+    return
+  }
+
+  // Legacy deposit handler (for backward compatibility)
   if (type === 'd') {
     await answerCb(cb.id)
     if (action === 'custom') {
-      await setUserState(chatId, { action: 'dep_custom', msgId })
+      await setUserState(chatId, { action: 'dep_ton_custom', msgId, data: { currency: 'TON' } })
       await editText(chatId, msgId, `💰 *စိတ်ကြိုက် ပမာဏ*
 
 သွင်းလိုသော ပမာဏ ရိုက်ထည့်ပါ:
@@ -2776,16 +3286,14 @@ async function handleCallback(cb: { id: string; from: { id: number; username?: s
     return
   }
 
-  // Withdraw
+  // Legacy withdraw handler (for backward compatibility)
   if (type === 'w') {
     await answerCb(cb.id)
     if (action === 'custom') {
-      // Get balance for validation
       const profile = await getProfile(telegramId, username)
       const balance = Number(profile.balance)
       
-      // Get commission rate and min withdrawal for display
-      const { data: commSetting } = await supabase.from('settings').select('value').eq('key', 'commission_rate').single()
+      const { data: commSetting } = await supabase.from('settings').select('value').eq('key', 'commission_rate').maybeSingle()
       const commRate = commSetting ? parseFloat(commSetting.value) : 5
       
       const { data: minWdSetting } = await supabase.from('settings').select('value').eq('key', 'min_withdrawal_amount').maybeSingle()

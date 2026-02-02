@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { Search, RefreshCw, Clock, CheckCircle, XCircle, Download, Calendar, Filter } from 'lucide-react';
+import { Search, RefreshCw, Clock, CheckCircle, XCircle, Download, Calendar, Filter, Check, X, Eye } from 'lucide-react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,12 +25,21 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+import { Textarea } from '@/components/ui/textarea';
 
 interface Deposit {
   id: string;
@@ -43,6 +52,10 @@ interface Deposit {
   expires_at: string | null;
   status: string;
   unique_code: string | null;
+  currency: string;
+  payment_method: string | null;
+  screenshot_url: string | null;
+  admin_notes: string | null;
   profile?: {
     telegram_username: string | null;
     telegram_id: number | null;
@@ -65,6 +78,13 @@ function DepositStatusBadge({ status }: { status: string }) {
           သက်တမ်းကုန်
         </Badge>
       );
+    case 'rejected':
+      return (
+        <Badge className="bg-destructive/20 text-destructive border-destructive/30">
+          <XCircle className="mr-1 h-3 w-3" />
+          ငြင်းပယ်
+        </Badge>
+      );
     case 'pending':
     default:
       return (
@@ -76,14 +96,50 @@ function DepositStatusBadge({ status }: { status: string }) {
   }
 }
 
+function CurrencyBadge({ currency }: { currency: string }) {
+  if (currency === 'MMK') {
+    return (
+      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+        💵 MMK
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
+      💎 TON
+    </Badge>
+  );
+}
+
+function PaymentMethodBadge({ method }: { method: string | null }) {
+  if (!method || method === 'TON') return null;
+  
+  const methodInfo: Record<string, { icon: string; label: string; color: string }> = {
+    'KBZPAY': { icon: '📱', label: 'KBZPay', color: 'bg-red-500/10 text-red-600 border-red-500/30' },
+    'WAVEPAY': { icon: '📲', label: 'WavePay', color: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30' },
+  };
+  
+  const info = methodInfo[method] || { icon: '💳', label: method, color: 'bg-muted' };
+  
+  return (
+    <Badge variant="outline" className={info.color}>
+      {info.icon} {info.label}
+    </Badge>
+  );
+}
+
 export default function AdminDeposits() {
   const [deposits, setDeposits] = useState<Deposit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [currencyFilter, setCurrencyFilter] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
   const [isExporting, setIsExporting] = useState(false);
+  const [selectedDeposit, setSelectedDeposit] = useState<Deposit | null>(null);
+  const [approvalNotes, setApprovalNotes] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     fetchDeposits();
@@ -132,19 +188,103 @@ export default function AdminDeposits() {
       (dep.profile?.telegram_username?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     
     const matchesStatus = statusFilter === 'all' || dep.status === statusFilter;
+    const matchesCurrency = currencyFilter === 'all' || dep.currency === currencyFilter;
     
     const depDate = new Date(dep.created_at);
     const matchesDateFrom = !dateFrom || depDate >= dateFrom;
     const matchesDateTo = !dateTo || depDate <= new Date(dateTo.getTime() + 24 * 60 * 60 * 1000 - 1);
     
-    return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
+    return matchesSearch && matchesStatus && matchesCurrency && matchesDateFrom && matchesDateTo;
   });
 
   const clearFilters = () => {
     setSearchTerm('');
     setStatusFilter('all');
+    setCurrencyFilter('all');
     setDateFrom(undefined);
     setDateTo(undefined);
+  };
+
+  // Handle MMK deposit approval
+  const handleApproveDeposit = async (deposit: Deposit) => {
+    setIsProcessing(true);
+    try {
+      // Update deposit status
+      await supabase
+        .from('deposits')
+        .update({
+          status: 'confirmed',
+          is_confirmed: true,
+          confirmed_at: new Date().toISOString(),
+          admin_notes: approvalNotes || null,
+        })
+        .eq('id', deposit.id);
+
+      // Credit user's MMK balance
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('balance_mmk')
+        .eq('id', deposit.profile_id)
+        .single();
+
+      if (profile) {
+        const newBalance = Number(profile.balance_mmk || 0) + Number(deposit.amount_ton);
+        await supabase
+          .from('profiles')
+          .update({ balance_mmk: newBalance })
+          .eq('id', deposit.profile_id);
+      }
+
+      toast({
+        title: "အတည်ပြုပြီး",
+        description: `${Number(deposit.amount_ton).toLocaleString()} MMK ထည့်သွင်းပြီးပါပြီ`,
+      });
+
+      setSelectedDeposit(null);
+      setApprovalNotes('');
+      fetchDeposits();
+    } catch (error) {
+      console.error('Error approving deposit:', error);
+      toast({
+        title: "အမှား",
+        description: "ငွေသွင်းမှု အတည်ပြုရာတွင် အမှားဖြစ်ပွားပါပြီ",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Handle MMK deposit rejection
+  const handleRejectDeposit = async (deposit: Deposit) => {
+    setIsProcessing(true);
+    try {
+      await supabase
+        .from('deposits')
+        .update({
+          status: 'rejected',
+          admin_notes: approvalNotes || 'ငြင်းပယ်ခံရပါပြီ',
+        })
+        .eq('id', deposit.id);
+
+      toast({
+        title: "ငြင်းပယ်ပြီး",
+        description: "ငွေသွင်းမှု ငြင်းပယ်ပြီးပါပြီ",
+      });
+
+      setSelectedDeposit(null);
+      setApprovalNotes('');
+      fetchDeposits();
+    } catch (error) {
+      console.error('Error rejecting deposit:', error);
+      toast({
+        title: "အမှား",
+        description: "ငွေသွင်းမှု ငြင်းပယ်ရာတွင် အမှားဖြစ်ပွားပါပြီ",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const exportToCSV = () => {
@@ -285,14 +425,25 @@ export default function AdminDeposits() {
                 />
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-48">
+                <SelectTrigger className="w-full sm:w-40">
                   <SelectValue placeholder="Status ရွေး" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">အားလုံး</SelectItem>
                   <SelectItem value="pending">စောင့်ဆိုင်းနေ</SelectItem>
                   <SelectItem value="confirmed">အတည်ပြုပြီး</SelectItem>
+                  <SelectItem value="rejected">ငြင်းပယ်</SelectItem>
                   <SelectItem value="expired">သက်တမ်းကုန်</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={currencyFilter} onValueChange={setCurrencyFilter}>
+                <SelectTrigger className="w-full sm:w-32">
+                  <SelectValue placeholder="Currency" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">အားလုံး</SelectItem>
+                  <SelectItem value="TON">💎 TON</SelectItem>
+                  <SelectItem value="MMK">💵 MMK</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -381,17 +532,18 @@ export default function AdminDeposits() {
                   <TableRow>
                     <TableHead>ရက်စွဲ</TableHead>
                     <TableHead>Code</TableHead>
-                    <TableHead>ပမာဏ (TON)</TableHead>
+                    <TableHead>Currency</TableHead>
+                    <TableHead>ပမာဏ</TableHead>
                     <TableHead>အသုံးပြုသူ</TableHead>
+                    <TableHead>Payment</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>သက်တမ်း</TableHead>
-                    <TableHead>TX Hash</TableHead>
+                    <TableHead>TX/Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredDeposits.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center">
+                      <TableCell colSpan={8} className="h-24 text-center">
                         ငွေသွင်းမှု မရှိပါ
                       </TableCell>
                     </TableRow>
@@ -410,12 +562,18 @@ export default function AdminDeposits() {
                             <span className="text-muted-foreground">-</span>
                           )}
                         </TableCell>
+                        <TableCell>
+                          <CurrencyBadge currency={dep.currency || 'TON'} />
+                        </TableCell>
                         <TableCell className="font-mono font-bold">
-                          {Number(dep.amount_ton).toFixed(4)}
+                          {dep.currency === 'MMK' 
+                            ? `${Number(dep.amount_ton).toLocaleString()} Ks`
+                            : `${Number(dep.amount_ton).toFixed(4)} TON`
+                          }
                         </TableCell>
                         <TableCell>
                           {dep.profile?.telegram_username ? (
-                            <span className="text-sm">@{dep.profile.telegram_username}</span>
+                            <span className="text-sm font-medium">@{dep.profile.telegram_username}</span>
                           ) : dep.profile?.telegram_id ? (
                             <span className="text-xs text-muted-foreground">{dep.profile.telegram_id}</span>
                           ) : (
@@ -423,19 +581,25 @@ export default function AdminDeposits() {
                           )}
                         </TableCell>
                         <TableCell>
+                          <PaymentMethodBadge method={dep.payment_method} />
+                        </TableCell>
+                        <TableCell>
                           <DepositStatusBadge status={dep.status} />
                         </TableCell>
                         <TableCell>
-                          {dep.expires_at ? (
-                            <span className={`text-xs ${new Date(dep.expires_at) < new Date() ? 'text-destructive' : 'text-muted-foreground'}`}>
-                              {format(new Date(dep.expires_at), 'HH:mm')}
-                            </span>
-                          ) : (
-                            '-'
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {dep.ton_tx_hash && dep.status === 'confirmed' ? (
+                          {dep.currency === 'MMK' && dep.status === 'pending' ? (
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs bg-success/10 hover:bg-success/20 text-success border-success/30"
+                                onClick={() => setSelectedDeposit(dep)}
+                              >
+                                <Check className="h-3 w-3 mr-1" />
+                                Approve
+                              </Button>
+                            </div>
+                          ) : dep.ton_tx_hash && dep.status === 'confirmed' ? (
                             <a
                               href={`https://tonscan.org/tx/${dep.ton_tx_hash}`}
                               target="_blank"
@@ -457,6 +621,70 @@ export default function AdminDeposits() {
           )}
         </CardContent>
       </Card>
+
+      {/* MMK Deposit Approval Dialog */}
+      <Dialog open={!!selectedDeposit} onOpenChange={() => setSelectedDeposit(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>MMK ငွေသွင်းမှု စစ်ဆေးရန်</DialogTitle>
+            <DialogDescription>
+              ငွေသွင်းမှု အချက်အလက်များကို စစ်ဆေးပြီး အတည်ပြု သို့မဟုတ် ငြင်းပယ်ပါ
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedDeposit && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">ပမာဏ:</span>
+                  <span className="font-bold">{Number(selectedDeposit.amount_ton).toLocaleString()} MMK</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Code:</span>
+                  <code className="font-mono text-primary">{selectedDeposit.unique_code}</code>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">User:</span>
+                  <span>@{selectedDeposit.profile?.telegram_username || selectedDeposit.profile?.telegram_id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Payment:</span>
+                  <PaymentMethodBadge method={selectedDeposit.payment_method} />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">မှတ်ချက် (Optional)</label>
+                <Textarea
+                  placeholder="Admin notes..."
+                  value={approvalNotes}
+                  onChange={(e) => setApprovalNotes(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button
+              variant="destructive"
+              onClick={() => selectedDeposit && handleRejectDeposit(selectedDeposit)}
+              disabled={isProcessing}
+            >
+              <X className="h-4 w-4 mr-1" />
+              ငြင်းပယ်
+            </Button>
+            <Button
+              onClick={() => selectedDeposit && handleApproveDeposit(selectedDeposit)}
+              disabled={isProcessing}
+              className="bg-success hover:bg-success/90"
+            >
+              <Check className="h-4 w-4 mr-1" />
+              {isProcessing ? 'Processing...' : 'အတည်ပြု'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
