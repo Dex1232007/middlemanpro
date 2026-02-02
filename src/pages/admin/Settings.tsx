@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Loader2, Wallet, Percent, Bot, Copy, Check, RefreshCw, CheckCircle, AlertCircle, Key, Eye, EyeOff, Shield, Trash2, Zap, Hand, Send, ArrowUpRight, Gift, Power, Wrench, Clock, Calendar } from 'lucide-react';
+import { Save, Loader2, Wallet, Percent, Bot, Copy, Check, RefreshCw, CheckCircle, AlertCircle, Key, Eye, EyeOff, Shield, Trash2, Zap, Hand, Send, ArrowUpRight, Gift, Power, Wrench, Clock, Calendar, CreditCard } from 'lucide-react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,6 +75,11 @@ export default function AdminSettings() {
   const [referralL2Rate, setReferralL2Rate] = useState('3');
   const [isSavingReferral, setIsSavingReferral] = useState(false);
   const [isSavingAdminTg, setIsSavingAdminTg] = useState(false);
+
+  // MMK Payment Account Settings
+  const [kbzpayAccount, setKbzpayAccount] = useState('');
+  const [wavepayAccount, setWavepayAccount] = useState('');
+  const [isSavingPaymentAccounts, setIsSavingPaymentAccounts] = useState(false);
 
   // Wallet balance states
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
@@ -316,6 +321,8 @@ export default function AdminSettings() {
       const schedEnabled = data?.find(s => s.key === 'scheduled_maintenance_enabled');
       const schedStart = data?.find(s => s.key === 'scheduled_maintenance_start');
       const schedEnd = data?.find(s => s.key === 'scheduled_maintenance_end');
+      const kbzpay = data?.find(s => s.key === 'kbzpay_account');
+      const wavepay = data?.find(s => s.key === 'wavepay_account');
       
       if (commission) setCommissionRate(commission.value);
       if (wallet) setAdminWallet(wallet.value);
@@ -331,6 +338,8 @@ export default function AdminSettings() {
       if (schedEnabled) setScheduledEnabled(schedEnabled.value === 'true');
       if (schedStart) setScheduleStart(schedStart.value);
       if (schedEnd) setScheduleEnd(schedEnd.value);
+      if (kbzpay) setKbzpayAccount(kbzpay.value);
+      if (wavepay) setWavepayAccount(wavepay.value);
     } catch (error) {
       console.error('Error fetching settings:', error);
     } finally {
@@ -475,6 +484,30 @@ export default function AdminSettings() {
       toast.error('သိမ်းဆည်းမှု မအောင်မြင်ပါ');
     } finally {
       setIsSavingReferral(false);
+    }
+  };
+
+  const savePaymentAccounts = async () => {
+    setIsSavingPaymentAccounts(true);
+    try {
+      const { error: kbzError } = await supabase
+        .from('settings')
+        .upsert({ key: 'kbzpay_account', value: kbzpayAccount, description: 'KBZPay Account Number' }, { onConflict: 'key' });
+
+      if (kbzError) throw kbzError;
+
+      const { error: waveError } = await supabase
+        .from('settings')
+        .upsert({ key: 'wavepay_account', value: wavepayAccount, description: 'WavePay Account Number' }, { onConflict: 'key' });
+
+      if (waveError) throw waveError;
+
+      toast.success('Payment Account များ သိမ်းဆည်းပြီးပါပြီ');
+    } catch (error) {
+      console.error('Error saving payment accounts:', error);
+      toast.error('သိမ်းဆည်းမှု မအောင်မြင်ပါ');
+    } finally {
+      setIsSavingPaymentAccounts(false);
     }
   };
 
@@ -846,6 +879,71 @@ export default function AdminSettings() {
                   ဥပမာ: 0.01 ဆိုပါက 0.01 TON အောက် ထုတ်ယူ၍မရပါ
                 </p>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* MMK Payment Account Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5" />
+              MMK Payment Accounts
+            </CardTitle>
+            <CardDescription>
+              KBZPay နှင့် WavePay ငွေလက်ခံရန် Account Numbers များ
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="kbzpayAccount">
+                  <span className="inline-flex items-center gap-2">
+                    📱 KBZPay Account
+                  </span>
+                </Label>
+                <Input
+                  id="kbzpayAccount"
+                  type="text"
+                  placeholder="09xxxxxxxxx (သို့မဟုတ်) Account Name - 09xxxxxxxxx"
+                  value={kbzpayAccount}
+                  onChange={(e) => setKbzpayAccount(e.target.value)}
+                />
+                <p className="text-sm text-muted-foreground">
+                  User များ MMK deposit တင်ရာတွင် ဤ account ကို ပြပေးပါမည်
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="wavepayAccount">
+                  <span className="inline-flex items-center gap-2">
+                    📲 WavePay Account
+                  </span>
+                </Label>
+                <Input
+                  id="wavepayAccount"
+                  type="text"
+                  placeholder="09xxxxxxxxx (သို့မဟုတ်) Account Name - 09xxxxxxxxx"
+                  value={wavepayAccount}
+                  onChange={(e) => setWavepayAccount(e.target.value)}
+                />
+                <p className="text-sm text-muted-foreground">
+                  User များ MMK deposit တင်ရာတွင် ဤ account ကို ပြပေးပါမည်
+                </p>
+              </div>
+
+              <Button 
+                onClick={savePaymentAccounts} 
+                disabled={isSavingPaymentAccounts}
+                className="w-fit"
+              >
+                {isSavingPaymentAccounts ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                Payment Accounts သိမ်းမည်
+              </Button>
             </div>
           </CardContent>
         </Card>
