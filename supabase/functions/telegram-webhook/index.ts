@@ -2154,6 +2154,159 @@ Admin ထံ ဆက်သွယ်ပါ။`, backBtn())
   await deleteUserState(chatId)
 }
 
+// Handle MMK withdrawal request with phone number
+async function handleMMKWithdrawRequest(chatId: number, phone: string, msgId: number, username?: string) {
+  const state = await getUserState(chatId)
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
+  
+  // Get amount data from state
+  const amount = Number(state?.data?.amount) || 0
+  const fee = Number(state?.data?.fee) || 0
+  const receiveAmount = Number(state?.data?.receiveAmount) || (amount - fee)
+  const paymentMethod = state?.data?.paymentMethod || 'KBZPAY'
+  const { data: commSetting } = await supabase.from('settings').select('value').eq('key', 'commission_rate').maybeSingle()
+  const commRate = commSetting ? parseFloat(commSetting.value) : 5
+  
+  console.log(`[MMK WD Request] Amount: ${amount}, Fee: ${fee}, Receive: ${receiveAmount}, Method: ${paymentMethod}`)
+  
+  if (!amount || amount <= 0 || !phone) {
+    await editText(chatId, msgId, '❌ ပမာဏ သို့မဟုတ် ဖုန်းနံပါတ် မှားနေပါသည်', backBtn(lang))
+    await deleteUserState(chatId)
+    return
+  }
+
+  // Validate phone number format (Myanmar format)
+  const cleanPhone = phone.replace(/\s+/g, '').replace(/-/g, '')
+  if (!cleanPhone.match(/^(09|959|\+959)[0-9]{7,9}$/)) {
+    await editText(chatId, msgId, `❌ *ဖုန်းနံပါတ် မမှန်ကန်ပါ*
+
+${lang === 'en' ? 'Please enter a valid Myanmar phone number' : 'မြန်မာ ဖုန်းနံပါတ် ထည့်ပါ'}
+${lang === 'en' ? 'Example' : 'ဥပမာ'}: \`09xxxxxxxxx\``, cancelBtn(lang))
+    return
+  }
+
+  // Validate amount limits
+  const MIN_WITHDRAWAL = 1000 // Minimum 1000 MMK
+  const MAX_WITHDRAWAL = 10000000 // Maximum 10M MMK
+  if (amount < MIN_WITHDRAWAL || amount > MAX_WITHDRAWAL) {
+    await editText(chatId, msgId, `❌ *ပမာဏ မမှန်ကန်ပါ*
+
+${MIN_WITHDRAWAL.toLocaleString()} - ${MAX_WITHDRAWAL.toLocaleString()} MMK ${lang === 'en' ? 'must be' : 'ဖြစ်ရပါမည်'}`, cancelBtn(lang))
+    await deleteUserState(chatId)
+    return
+  }
+
+  // Check balance
+  const balanceMMK = Number(profile.balance_mmk) || 0
+  if (balanceMMK < amount) {
+    await editText(chatId, msgId, `❌ *${lang === 'en' ? 'Insufficient balance' : 'လက်ကျန်ငွေ မလုံလောက်ပါ'}*
+
+${lang === 'en' ? 'Balance' : 'လက်ကျန်'}: ${balanceMMK.toLocaleString()} MMK
+${lang === 'en' ? 'Requested' : 'ထုတ်ယူလိုသည်'}: ${amount.toLocaleString()} MMK`, backBtn(lang))
+    await deleteUserState(chatId)
+    return
+  }
+
+  const methodName = paymentMethod === 'KBZPAY' ? 'KBZPay' : 'WavePay'
+  const methodIcon = paymentMethod === 'KBZPAY' ? '📱' : '📲'
+
+  // Delete current message and send new one for tracking
+  await deleteMsg(chatId, msgId)
+  
+  // Send status message and save its ID for live updates
+  const statusMsgId = await sendMessage(chatId, `⏳ *${lang === 'en' ? 'Submitting withdrawal request...' : 'ငွေထုတ်ယူမှု တောင်းဆိုနေသည်...'}*
+
+╔══════════════════════════════╗
+║                              ║
+║    ⏳ *PROCESSING...*        ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${methodIcon} *Payment:* ${methodName}
+💵 *${lang === 'en' ? 'Amount' : 'ထုတ်ယူမည်'}:* ${amount.toLocaleString()} MMK
+📊 *Commission (${commRate}%):* -${fee.toLocaleString()} MMK
+✅ *${lang === 'en' ? 'You receive' : 'ရရှိမည်'}:* ${receiveAmount.toLocaleString()} MMK
+📱 *${lang === 'en' ? 'Phone' : 'ဖုန်း'}:* \`${cleanPhone}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⏳ *Status:* ${lang === 'en' ? 'Processing...' : 'စောင့်ဆိုင်းနေသည်...'}`)
+
+  // Create withdrawal record with currency=MMK
+  const { data: newWithdrawal, error } = await supabase.from('withdrawals').insert({
+    profile_id: profile.id,
+    amount_ton: amount, // Using amount_ton field for MMK amount too
+    destination_wallet: cleanPhone,
+    status: 'pending',
+    currency: 'MMK',
+    payment_method: paymentMethod,
+    admin_notes: `${methodName} | Fee: ${fee.toLocaleString()} MMK (${commRate}%), Receive: ${receiveAmount.toLocaleString()} MMK`,
+    telegram_msg_id: statusMsgId,
+  }).select().single()
+
+  if (error) {
+    console.error('MMK Withdrawal creation error:', error)
+    if (statusMsgId) {
+      await editText(chatId, statusMsgId, `❌ ${lang === 'en' ? 'Error occurred' : 'အမှားဖြစ်ပွားပါသည်'}`, backBtn(lang))
+    }
+    await deleteUserState(chatId)
+    return
+  }
+
+  // Notify admin about new MMK withdrawal
+  try {
+    await fetch(`${SUPABASE_URL}/functions/v1/notify-user`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+      },
+      body: JSON.stringify({
+        type: 'admin_new_mmk_withdrawal',
+        amount: amount,
+        user_telegram_username: profile.telegram_username,
+        destination_wallet: cleanPhone,
+        payment_method: paymentMethod,
+        currency: 'MMK'
+      })
+    })
+    console.log('Admin notified about new MMK withdrawal')
+  } catch (e) {
+    console.error('Failed to notify admin about MMK withdrawal:', e)
+  }
+
+  // Show success message for manual processing
+  const newBalance = balanceMMK // Balance unchanged until approved
+  
+  if (statusMsgId) {
+    await editText(chatId, statusMsgId, `✅ *${lang === 'en' ? 'Withdrawal request submitted!' : 'ငွေထုတ်ယူမှု တောင်းဆိုပြီး!'}*
+
+╔══════════════════════════════╗
+║                              ║
+║    📋 *REQUEST SUBMITTED*    ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${methodIcon} *Payment:* ${methodName}
+💵 *${lang === 'en' ? 'Amount' : 'ထုတ်ယူမည်'}:* ${amount.toLocaleString()} MMK
+📊 *Commission (${commRate}%):* -${fee.toLocaleString()} MMK
+✅ *${lang === 'en' ? 'You receive' : 'ရရှိမည်'}:* ${receiveAmount.toLocaleString()} MMK
+📱 *${lang === 'en' ? 'Phone' : 'ဖုန်း'}:* \`${cleanPhone}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💰 *${lang === 'en' ? 'Balance' : 'လက်ကျန်'}:* ${newBalance.toLocaleString()} MMK
+   _(${lang === 'en' ? 'Will be deducted upon approval' : 'အတည်ပြုပြီးမှ ဖြတ်ပါမည်'})_
+
+⏳ *Status:* ${lang === 'en' ? 'Waiting for admin approval' : 'Admin မှ အတည်ပြုရန် စောင့်နေသည်'}
+
+📌 ${lang === 'en' ? 'Upon approval, funds will be sent to your phone' : 'အတည်ပြုပြီးပါက သင့်ဖုန်းသို့ ငွေပို့ပေးပါမည်'}`, backBtn(lang))
+  }
+  
+  await deleteUserState(chatId)
+}
+
 async function handleBuyLink(chatId: number, link: string, username?: string) {
   const { data: tx } = await supabase
     .from('transactions')
@@ -3183,6 +3336,55 @@ Bot ကောင်းစွာအလုပ်လုပ်နေပါသည်!
       await deleteMsg(chatId, inMsgId)
       return
     }
+  }
+
+  // MMK custom withdrawal amount input
+  if (state?.action === 'wm_custom' && state.msgId) {
+    const amount = parseInt(text)
+    const balance = Number(state.data?.balance) || 0
+    const minWithdrawal = 1000 // Minimum 1000 MMK
+    
+    if (!isNaN(amount) && amount >= minWithdrawal && amount <= balance) {
+      await showWithdrawMMKMethod(chatId, state.msgId, amount, username)
+      await deleteMsg(chatId, inMsgId)
+      return
+    } else if (amount < minWithdrawal) {
+      await editText(chatId, state.msgId, `❌ *အနည်းဆုံး ပမာဏ: ${minWithdrawal.toLocaleString()} MMK*\n\nထုတ်ယူလိုသော ပမာဏ ထပ်ရိုက်ပါ:`, cancelBtn())
+      await deleteMsg(chatId, inMsgId)
+      return
+    } else if (amount > balance) {
+      await editText(chatId, state.msgId, `❌ *လက်ကျန်ငွေ မလုံလောက်ပါ*\n\nလက်ကျန်: ${balance.toLocaleString()} MMK\n\nထုတ်ယူလိုသော ပမာဏ ထပ်ရိုက်ပါ:`, cancelBtn())
+      await deleteMsg(chatId, inMsgId)
+      return
+    }
+  }
+
+  // TON custom withdrawal amount input
+  if (state?.action === 'wt_custom' && state.msgId) {
+    const amount = parseFloat(text)
+    const balance = Number(state.data?.balance) || 0
+    const minWithdrawal = 0.5 // Minimum 0.5 TON
+    
+    if (!isNaN(amount) && amount >= minWithdrawal && amount <= balance) {
+      await showWithdrawWalletPrompt(chatId, state.msgId, amount)
+      await deleteMsg(chatId, inMsgId)
+      return
+    } else if (amount < minWithdrawal) {
+      await editText(chatId, state.msgId, `❌ *အနည်းဆုံး ပမာဏ: ${minWithdrawal} TON*\n\nထုတ်ယူလိုသော ပမာဏ ထပ်ရိုက်ပါ:`, cancelBtn())
+      await deleteMsg(chatId, inMsgId)
+      return
+    } else if (amount > balance) {
+      await editText(chatId, state.msgId, `❌ *လက်ကျန်ငွေ မလုံလောက်ပါ*\n\nလက်ကျန်: ${balance.toFixed(4)} TON\n\nထုတ်ယူလိုသော ပမာဏ ထပ်ရိုက်ပါ:`, cancelBtn())
+      await deleteMsg(chatId, inMsgId)
+      return
+    }
+  }
+
+  // MMK withdrawal phone number input
+  if (state?.action === 'wm_phone' && state.msgId) {
+    await handleMMKWithdrawRequest(chatId, text, state.msgId, username)
+    await deleteMsg(chatId, inMsgId)
+    return
   }
 
   if (state?.action === 'dep_custom' && state.msgId) {
