@@ -33,7 +33,7 @@ async function sendTelegramMessage(chatId: number, text: string, parseMode = 'Ma
 }
 
 interface NotifyRequest {
-  type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx' | 'admin_new_deposit' | 'admin_transaction_completed'
+  type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx' | 'admin_new_deposit' | 'admin_transaction_completed' | 'mmk_deposit_approved' | 'mmk_deposit_rejected'
   profile_id?: string
   telegram_id?: number
   amount?: number
@@ -51,6 +51,9 @@ interface NotifyRequest {
   seller_username?: string
   // Deposit fields
   unique_code?: string
+  currency?: string
+  payment_method?: string
+  new_balance?: number
 }
 
 async function verifyAdminAuth(req: Request): Promise<{ authorized: boolean; error?: string }> {
@@ -303,6 +306,47 @@ ${body.tx_hash ? `🔗 Hash: \`${body.tx_hash.substring(0, 16)}...\`` : ''}
 ━━━━━━━━━━━━━━━
 
 💵 ရောင်းသူ Balance ထဲသို့ ငွေထည့်ပြီးပါပြီ။`
+        break
+
+      case 'mmk_deposit_approved':
+        const methodNameApproved = body.payment_method === 'KBZPAY' ? 'KBZPay' : body.payment_method === 'WAVEPAY' ? 'WavePay' : 'MMK'
+        message = `✅ *ငွေသွင်းမှု အတည်ပြုပြီးပါပြီ!*
+
+╔══════════════════════════════╗
+║                              ║
+║     💵 *DEPOSIT APPROVED*    ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${Number(body.amount).toLocaleString()} MMK
+📱 *Payment:* ${methodNameApproved}
+🔑 *Code:* \`${body.unique_code || 'N/A'}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💰 *လက်ကျန်ငွေ:* ${Number(body.new_balance || 0).toLocaleString()} MMK
+${body.admin_notes ? `📝 *မှတ်ချက်:* ${body.admin_notes}` : ''}
+
+✅ သင့် Balance ထဲသို့ ထည့်သွင်းပြီးပါပြီ။`
+        break
+
+      case 'mmk_deposit_rejected':
+        const methodNameRejected = body.payment_method === 'KBZPAY' ? 'KBZPay' : body.payment_method === 'WAVEPAY' ? 'WavePay' : 'MMK'
+        message = `❌ *ငွေသွင်းမှု ငြင်းပယ်ခံရပါပြီ*
+
+╔══════════════════════════════╗
+║                              ║
+║     ❌ *DEPOSIT REJECTED*    ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${Number(body.amount).toLocaleString()} MMK
+📱 *Payment:* ${methodNameRejected}
+🔑 *Code:* \`${body.unique_code || 'N/A'}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${body.admin_notes}\n` : ''}
+⚠️ ပြန်လည်ကြိုးစားလိုပါက ငွေသွင်းမှုအသစ် ပြုလုပ်ပါ။`
         break
 
       case 'custom':
