@@ -426,7 +426,7 @@ const confirmBtns = (txId: string) => ({
 });
 
 // Buy buttons with balance option
-const buyBtns = (txId: string, hasBalance: boolean) => ({
+const buyBtns = (txId: string, hasBalance: boolean, lang: Language = 'my') => ({
   inline_keyboard: hasBalance
     ? [
         [{ text: "💰 Balance ဖြင့်ဝယ်မည်", callback_data: `buy:bal:${txId}` }],
