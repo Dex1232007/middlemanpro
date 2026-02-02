@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/dialog';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -389,14 +390,19 @@ export default function AdminDeposits() {
     }
   };
 
-  // Calculate stats
+  // Calculate stats by currency
   const stats = {
     total: deposits.length,
     pending: deposits.filter(d => d.status === 'pending').length,
     confirmed: deposits.filter(d => d.status === 'confirmed').length,
     expired: deposits.filter(d => d.status === 'expired').length,
-    totalAmount: deposits
-      .filter(d => d.status === 'confirmed')
+    pendingTON: deposits.filter(d => d.status === 'pending' && d.currency === 'TON').length,
+    pendingMMK: deposits.filter(d => d.status === 'pending' && d.currency === 'MMK').length,
+    totalAmountTON: deposits
+      .filter(d => d.status === 'confirmed' && d.currency === 'TON')
+      .reduce((sum, d) => sum + Number(d.amount_ton), 0),
+    totalAmountMMK: deposits
+      .filter(d => d.status === 'confirmed' && d.currency === 'MMK')
       .reduce((sum, d) => sum + Number(d.amount_ton), 0),
   };
 
@@ -405,17 +411,53 @@ export default function AdminDeposits() {
       title="ငွေသွင်းမှုများ" 
       subtitle="အသုံးပြုသူများ၏ ငွေသွင်းမှု မှတ်တမ်းများ"
     >
+      {/* Currency Tabs Filter */}
+      <div className="mb-6">
+        <Tabs value={currencyFilter} onValueChange={setCurrencyFilter} className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-3">
+            <TabsTrigger value="all" className="flex items-center gap-2">
+              အားလုံး
+              {stats.pending > 0 && (
+                <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-xs">
+                  {stats.pending}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="TON" className="flex items-center gap-2">
+              💎 TON
+              {stats.pendingTON > 0 && (
+                <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-xs bg-blue-500/20 text-blue-600">
+                  {stats.pendingTON}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="MMK" className="flex items-center gap-2">
+              💵 MMK
+              {stats.pendingMMK > 0 && (
+                <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-xs bg-emerald-500/20 text-emerald-600">
+                  {stats.pendingMMK}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4 mb-6">
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{stats.total}</div>
-            <p className="text-xs text-muted-foreground">စုစုပေါင်း</p>
+            <div className="text-2xl font-bold">{filteredDeposits.length}</div>
+            <p className="text-xs text-muted-foreground">
+              {currencyFilter === 'all' ? 'စုစုပေါင်း' : `${currencyFilter} စုစုပေါင်း`}
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-warning">{stats.pending}</div>
+            <div className="text-2xl font-bold text-warning">
+              {currencyFilter === 'all' ? stats.pending : currencyFilter === 'TON' ? stats.pendingTON : stats.pendingMMK}
+            </div>
             <p className="text-xs text-muted-foreground">စောင့်ဆိုင်းနေ</p>
           </CardContent>
         </Card>
@@ -427,8 +469,26 @@ export default function AdminDeposits() {
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold font-mono">{stats.totalAmount.toFixed(2)} TON</div>
-            <p className="text-xs text-muted-foreground">စုစုပေါင်းပမာဏ</p>
+            {currencyFilter === 'MMK' ? (
+              <>
+                <div className="text-2xl font-bold font-mono">{stats.totalAmountMMK.toLocaleString()} Ks</div>
+                <p className="text-xs text-muted-foreground">MMK စုစုပေါင်း</p>
+              </>
+            ) : currencyFilter === 'TON' ? (
+              <>
+                <div className="text-2xl font-bold font-mono">{stats.totalAmountTON.toFixed(2)} TON</div>
+                <p className="text-xs text-muted-foreground">TON စုစုပေါင်း</p>
+              </>
+            ) : (
+              <>
+                <div className="text-lg font-bold font-mono">
+                  {stats.totalAmountTON.toFixed(2)} TON
+                </div>
+                <div className="text-sm font-mono text-muted-foreground">
+                  {stats.totalAmountMMK.toLocaleString()} Ks
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -481,16 +541,6 @@ export default function AdminDeposits() {
                   <SelectItem value="confirmed">အတည်ပြုပြီး</SelectItem>
                   <SelectItem value="rejected">ငြင်းပယ်</SelectItem>
                   <SelectItem value="expired">သက်တမ်းကုန်</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={currencyFilter} onValueChange={setCurrencyFilter}>
-                <SelectTrigger className="w-full sm:w-32">
-                  <SelectValue placeholder="Currency" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">အားလုံး</SelectItem>
-                  <SelectItem value="TON">💎 TON</SelectItem>
-                  <SelectItem value="MMK">💵 MMK</SelectItem>
                 </SelectContent>
               </Select>
             </div>
