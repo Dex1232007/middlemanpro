@@ -910,22 +910,65 @@ async function showBalance(chatId: number, msgId: number, username?: string) {
   }
 }
 
-async function showSellPrompt(chatId: number, msgId: number) {
-  await setUserState(chatId, { action: 'sell_title', msgId })
-  const text = `📦 *ပစ္စည်းရောင်း/ဝယ်ရန်*
+// Currency selection for sell flow
+const sellCurrencyBtn = (lang: Language = 'my') => ({
+  inline_keyboard: [
+    [{ text: '💎 TON', callback_data: 'sc:TON' }, { text: '💵 MMK', callback_data: 'sc:MMK' }],
+    [{ text: t(lang, 'menu.home'), callback_data: 'm:home' }],
+  ],
+})
 
-━━━━━━━━━━━━━━━
-📝 *အဆင့် ၁/၂*
-မိမိရောင်းဝယ်လိုသည့် ပစ္စည်းအမျိုးအမည် ရေးပို့ပါ:
-━━━━━━━━━━━━━━━
-
-ဥပမာ: \`iPhone 15 Pro Max\``
+async function showSellPrompt(chatId: number, msgId: number, username?: string) {
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
   
-  const edited = await editText(chatId, msgId, text, cancelBtn())
+  await setUserState(chatId, { action: 'sell_currency', msgId })
+  const text = `📦 *${lang === 'en' ? 'Create Order' : 'ပစ္စည်းရောင်း/ဝယ်ရန်'}*
+
+╔══════════════════════════════╗
+║                              ║
+║   💰 *SELECT CURRENCY*       ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${lang === 'en' ? 'Select payment currency:' : 'ငွေကြေးအမျိုးအစား ရွေးပါ:'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💎 *TON* - Crypto ဖြင့် ရောင်း/ဝယ်
+💵 *MMK* - ကျပ်ငွေ ဖြင့် ရောင်း/ဝယ်`
+  
+  const edited = await editText(chatId, msgId, text, sellCurrencyBtn(lang))
   if (!edited) {
     await deleteMsg(chatId, msgId)
-    const newMsg = await sendMessage(chatId, text, cancelBtn())
-    if (newMsg) await setUserState(chatId, { action: 'sell_title', msgId: newMsg })
+    const newMsg = await sendMessage(chatId, text, sellCurrencyBtn(lang))
+    if (newMsg) await setUserState(chatId, { action: 'sell_currency', msgId: newMsg })
+  }
+}
+
+// Show sell title prompt after currency selection
+async function showSellTitlePrompt(chatId: number, msgId: number, currency: string, username?: string) {
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
+  const currencyIcon = currency === 'TON' ? '💎' : '💵'
+  
+  await setUserState(chatId, { action: 'sell_title', msgId, data: { currency } })
+  const text = `📦 *${lang === 'en' ? 'Create Order' : 'ပစ္စည်းရောင်း/ဝယ်ရန်'}*
+
+━━━━━━━━━━━━━━━
+${currencyIcon} *Currency:* ${currency}
+━━━━━━━━━━━━━━━
+
+📝 *${lang === 'en' ? 'Step 1/2' : 'အဆင့် ၁/၂'}*
+${lang === 'en' ? 'Enter product name:' : 'မိမိရောင်းဝယ်လိုသည့် ပစ္စည်းအမျိုးအမည် ရေးပို့ပါ:'}
+
+${lang === 'en' ? 'Example' : 'ဥပမာ'}: \`iPhone 15 Pro Max\``
+  
+  const edited = await editText(chatId, msgId, text, cancelBtn(lang))
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    const newMsg = await sendMessage(chatId, text, cancelBtn(lang))
+    if (newMsg) await setUserState(chatId, { action: 'sell_title', msgId: newMsg, data: { currency } })
   }
 }
 
@@ -1843,62 +1886,85 @@ function validateProductInput(title: string, price: number): { valid: boolean; e
   return { valid: true }
 }
 
-// Step 1: Handle product title input
-async function handleSellTitle(chatId: number, title: string, msgId: number) {
+// Step 1: Handle product title input (with currency from state)
+async function handleSellTitle(chatId: number, title: string, msgId: number, username?: string) {
+  const state = await getUserState(chatId)
+  const currency = (state?.data?.currency as string) || 'TON'
+  const currencyIcon = currency === 'TON' ? '💎' : '💵'
+  const currencyUnit = currency === 'TON' ? 'TON' : 'MMK'
+  const priceExample = currency === 'TON' ? '`150` သို့ `25.5`' : '`50000` သို့ `100000`'
+  
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
   const safeTitle = title.substring(0, 200).trim()
   
   if (!safeTitle || safeTitle.length < 1) {
-    await editText(chatId, msgId, `❌ *ပစ္စည်းအမည် ထည့်ပါ*
+    await editText(chatId, msgId, `❌ *${lang === 'en' ? 'Enter product name' : 'ပစ္စည်းအမည် ထည့်ပါ'}*
 
 ━━━━━━━━━━━━━━━
-📝 *အဆင့် ၁/၂*
-ပစ္စည်းအမည် ထည့်ပါ:
-━━━━━━━━━━━━━━━`, cancelBtn())
+${currencyIcon} *Currency:* ${currency}
+━━━━━━━━━━━━━━━
+
+📝 *${lang === 'en' ? 'Step 1/2' : 'အဆင့် ၁/၂'}*
+${lang === 'en' ? 'Enter product name:' : 'ပစ္စည်းအမည် ထည့်ပါ:'}`, cancelBtn(lang))
     return
   }
   
-  // Save title and move to price step
-  await setUserState(chatId, { action: 'sell_price', msgId, data: { title: safeTitle } })
-  await editText(chatId, msgId, `📦 *ပစ္စည်းရောင်း/ဝယ်ရန်*
+  // Save title and currency, move to price step
+  await setUserState(chatId, { action: 'sell_price', msgId, data: { title: safeTitle, currency } })
+  await editText(chatId, msgId, `📦 *${lang === 'en' ? 'Create Order' : 'ပစ္စည်းရောင်း/ဝယ်ရန်'}*
 
 ━━━━━━━━━━━━━━━
+${currencyIcon} *Currency:* ${currency}
 📦 *${sanitizeTitle(safeTitle)}*
 ━━━━━━━━━━━━━━━
 
-💵 *အဆင့် ၂/၂*
-ဈေးနှုန်း (TON) ထည့်ပါ:
+${currencyIcon} *${lang === 'en' ? 'Step 2/2' : 'အဆင့် ၂/၂'}*
+${lang === 'en' ? `Enter price (${currencyUnit}):` : `ဈေးနှုန်း (${currencyUnit}) ထည့်ပါ:`}
 
-ဥပမာ: \`150\` သို့ \`25.5\``, cancelBtn())
+${lang === 'en' ? 'Example' : 'ဥပမာ'}: ${priceExample}`, cancelBtn(lang))
 }
 
-// Step 2: Handle product price input and create product
+// Step 2: Handle product price input and create product (with currency support)
 async function handleSellPrice(chatId: number, priceText: string, msgId: number, username?: string) {
   const state = await getUserState(chatId)
   const title = state?.data?.title as string
+  const currency = (state?.data?.currency as string) || 'TON'
+  const currencyIcon = currency === 'TON' ? '💎' : '💵'
+  const currencyUnit = currency === 'TON' ? 'TON' : 'MMK'
+  const priceExample = currency === 'TON' ? '`150` သို့ `25.5`' : '`50000` သို့ `100000`'
+  
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
   
   if (!title) {
-    await editText(chatId, msgId, '❌ အမှားဖြစ်ပွားပါသည်။ ထပ်မံကြိုးစားပါ', backBtn())
+    await editText(chatId, msgId, `❌ ${lang === 'en' ? 'Error occurred. Please try again' : 'အမှားဖြစ်ပွားပါသည်။ ထပ်မံကြိုးစားပါ'}`, backBtn(lang))
     await deleteUserState(chatId)
     return
   }
   
-  const price = parseFloat(priceText.trim())
+  // Parse price - for MMK, parse as integer
+  const price = currency === 'MMK' ? parseInt(priceText.trim()) : parseFloat(priceText.trim())
   
-  const validation = validateProductInput(title, price)
-  if (!validation.valid) {
-    await editText(chatId, msgId, `❌ *${validation.error}*
+  // Validate based on currency
+  const MIN_PRICE = currency === 'TON' ? 0.01 : 1000
+  const MAX_PRICE = currency === 'TON' ? 100000 : 100000000 // 100M MMK max
+  
+  if (isNaN(price) || !Number.isFinite(price) || price < MIN_PRICE || price > MAX_PRICE) {
+    await editText(chatId, msgId, `❌ *${lang === 'en' ? 'Invalid price' : 'ဈေးနှုန်း မမှန်ကန်ပါ'}*
 
 ━━━━━━━━━━━━━━━
+${currencyIcon} *Currency:* ${currency}
 📦 *${sanitizeTitle(title)}*
 ━━━━━━━━━━━━━━━
 
-💵 ဈေးနှုန်း (TON) ထည့်ပါ:
+${currencyIcon} ${lang === 'en' ? `Enter price (${currencyUnit}):` : `ဈေးနှုန်း (${currencyUnit}) ထည့်ပါ:`}
+(${MIN_PRICE.toLocaleString()} - ${MAX_PRICE.toLocaleString()} ${currencyUnit})
 
-ဥပမာ: \`150\` သို့ \`25.5\``, cancelBtn())
+${lang === 'en' ? 'Example' : 'ဥပမာ'}: ${priceExample}`, cancelBtn(lang))
     return
   }
 
-  const profile = await getProfile(chatId, username)
   const link = genLink()
 
   // NO FEE on selling - full price goes to seller
@@ -1906,48 +1972,69 @@ async function handleSellPrice(chatId: number, priceText: string, msgId: number,
   const commission = 0
   const sellerGets = price
 
+  // Create product with currency
   const { data: product, error } = await supabase
     .from('products')
-    .insert({ seller_id: profile.id, title, price_ton: price, unique_link: link, is_active: true })
+    .insert({ 
+      seller_id: profile.id, 
+      title, 
+      price_ton: price, 
+      unique_link: link, 
+      is_active: true,
+      currency: currency
+    })
     .select()
     .single()
 
   if (error) {
-    await editText(chatId, msgId, '❌ အမှားဖြစ်ပွားပါသည်', backBtn())
+    console.error('Product creation error:', error)
+    await editText(chatId, msgId, `❌ ${lang === 'en' ? 'Error occurred' : 'အမှားဖြစ်ပွားပါသည်'}`, backBtn(lang))
     await deleteUserState(chatId)
     return
   }
 
+  // Create transaction with currency and amount_mmk if MMK
   await supabase.from('transactions').insert({
     product_id: product.id,
     seller_id: profile.id,
-    amount_ton: price,
+    amount_ton: currency === 'TON' ? price : 0,
+    amount_mmk: currency === 'MMK' ? price : 0,
     commission_ton: commission,
-    seller_receives_ton: sellerGets,
+    seller_receives_ton: currency === 'TON' ? sellerGets : 0,
     unique_link: link,
     status: 'pending_payment',
+    currency: currency,
   })
 
   const { data: botSetting } = await supabase.from('settings').select('value').eq('key', 'bot_username').single()
   const botUsername = botSetting?.value || 'YourBot'
   const productLink = `https://t.me/${botUsername}?start=buy_${link}`
 
-  const safeTitle = sanitizeTitle(title)
-  await editText(chatId, msgId, `✅ *Order ဖန်တီးပြီး!*
+  const displayPrice = currency === 'TON' ? `${price} TON` : `${price.toLocaleString()} MMK`
+  const displaySellerGets = currency === 'TON' ? `${sellerGets.toFixed(2)} TON` : `${sellerGets.toLocaleString()} MMK`
+  const safeDisplayTitle = sanitizeTitle(title)
+  
+  await editText(chatId, msgId, `✅ *${lang === 'en' ? 'Order Created!' : 'Order ဖန်တီးပြီး!'}*
 
-━━━━━━━━━━━━━━━
-📦 *${safeTitle}*
-💵 ဈေး: *${price} TON*
-💰 ရရှိမည်: *${sellerGets.toFixed(2)} TON*
-━━━━━━━━━━━━━━━
+╔══════════════════════════════╗
+║                              ║
+║   ✅ *ORDER CREATED*         ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${currencyIcon} *Currency:* ${currency}
+📦 *${safeDisplayTitle}*
+${currencyIcon} ${lang === 'en' ? 'Price' : 'ဈေး'}: *${displayPrice}*
+💰 ${lang === 'en' ? 'You receive' : 'ရရှိမည်'}: *${displaySellerGets}*
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🔗 *Link:*
 \`${productLink}\`
 
-📢 မိမိနှင့် ရောင်းဝယ်မည့်သူထံသို့ ဤ Link အားပို့ပြီး ငွေချေမှုလုပ်ဆောင်ခိုင်းပါ
+📢 ${lang === 'en' ? 'Share this link with the buyer' : 'မိမိနှင့် ရောင်းဝယ်မည့်သူထံသို့ ဤ Link အားပို့ပါ'}
 
-💡 *မှတ်ချက်:* ငွေထုတ်ယူသောအခါ
-commission ဖြတ်ပါမည်`, backBtn())
+💡 *${lang === 'en' ? 'Note' : 'မှတ်ချက်'}:* ${lang === 'en' ? 'Commission deducted on withdrawal' : 'ငွေထုတ်ယူသောအခါ commission ဖြတ်ပါမည်'}`, backBtn(lang))
   await deleteUserState(chatId)
 }
 
@@ -2407,6 +2494,7 @@ async function handleBuyLink(chatId: number, link: string, username?: string) {
   }
 
   const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
 
   if (tx.seller_id === profile.id) {
     await sendMessage(chatId, '❌ *ကိုယ်တိုင်ဖန်တီးထားသော ပစ္စည်း ဝယ်၍မရပါ*', mainMenu())
@@ -2433,39 +2521,87 @@ async function handleBuyLink(chatId: number, link: string, username?: string) {
     expires_at: expiresAt.toISOString()
   }).eq('id', tx.id)
 
-  const adminWallet = await getAdminWallet()
-  if (!adminWallet) {
-    await sendMessage(chatId, '❌ Wallet မသတ်မှတ်ရသေးပါ', mainMenu())
-    return
-  }
-
-  // Check if buyer has enough balance
-  const buyerBalance = Number(profile.balance)
-  const hasEnoughBalance = buyerBalance >= Number(tx.amount_ton)
+  // Determine currency from transaction
+  const txCurrency = tx.currency || 'TON'
+  const isMMK = txCurrency === 'MMK'
+  const currencyIcon = isMMK ? '💵' : '💎'
+  
+  // Get appropriate amount and balance
+  const amount = isMMK ? Number(tx.amount_mmk || 0) : Number(tx.amount_ton)
+  const buyerBalance = isMMK ? Number(profile.balance_mmk || 0) : Number(profile.balance)
+  const hasEnoughBalance = buyerBalance >= amount
+  
   const sellerUsername = tx.seller?.telegram_username ? `@${tx.seller.telegram_username}` : 'Seller'
   const sellerRating = tx.seller?.avg_rating ? `⭐ ${Number(tx.seller.avg_rating).toFixed(1)} (${tx.seller.total_ratings || 0})` : '⭐ အဆင့်သတ်မှတ်မှုမရှိသေး'
 
-  const comment = `tx_${tx.unique_link}`
-  const qr = generateQR(adminWallet, tx.amount_ton, comment)
+  const displayAmount = isMMK ? `${amount.toLocaleString()} MMK` : `${amount} TON`
+  const displayBalance = isMMK ? `${buyerBalance.toLocaleString()} MMK` : `${buyerBalance.toFixed(2)} TON`
 
-  // Send QR with balance option if available
-  let caption = `🛒 *ဝယ်ယူရန်*
+  if (isMMK) {
+    // MMK transaction - balance payment only (no QR)
+    let caption = `🛒 *${lang === 'en' ? 'Purchase' : 'ဝယ်ယူရန်'}*
+
+╔══════════════════════════════╗
+║                              ║
+║   ${currencyIcon} *MMK PURCHASE*         ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+${currencyIcon} *${displayAmount}*
+🏪 ${sellerUsername}
+${sellerRating}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💳 ${lang === 'en' ? 'Your Balance' : 'လက်ကျန်'}: *${displayBalance}*`
+
+    if (hasEnoughBalance) {
+      caption += `
+
+✅ *${lang === 'en' ? 'You can pay with balance!' : 'Balance နဲ့ ဝယ်နိုင်ပါတယ်!'}*
+
+👆 ${lang === 'en' ? 'Click the button below to pay' : 'အောက်က ခလုပ်နှိပ်ပြီး ငွေချေပါ'}`
+    } else {
+      caption += `
+
+❌ *${lang === 'en' ? 'Insufficient balance' : 'လက်ကျန်ငွေ မလုံလောက်ပါ'}*
+
+💰 ${lang === 'en' ? 'Please deposit MMK first' : 'ပထမဦးစွာ MMK ငွေသွင်းပါ'}`
+    }
+
+    const msgId = await sendMessage(chatId, caption, buyBtns(tx.id, hasEnoughBalance))
+    if (msgId) {
+      await supabase.from('transactions').update({ buyer_msg_id: msgId }).eq('id', tx.id)
+    }
+  } else {
+    // TON transaction - QR code payment
+    const adminWallet = await getAdminWallet()
+    if (!adminWallet) {
+      await sendMessage(chatId, '❌ Wallet မသတ်မှတ်ရသေးပါ', mainMenu())
+      return
+    }
+
+    const comment = `tx_${tx.unique_link}`
+    const qr = generateQR(adminWallet, amount, comment)
+
+    let caption = `🛒 *${lang === 'en' ? 'Purchase' : 'ဝယ်ယူရန်'}*
 
 ━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *${tx.amount_ton} TON*
+${currencyIcon} *${displayAmount}*
 🏪 ${sellerUsername}
 ${sellerRating}
 ━━━━━━━━━━━━━━━`
 
-  if (hasEnoughBalance) {
-    caption += `
-💳 လက်ကျန်: *${buyerBalance.toFixed(2)} TON*
-✅ *Balance နဲ့ ဝယ်နိုင်ပါတယ်!*
+    if (hasEnoughBalance) {
+      caption += `
+💳 ${lang === 'en' ? 'Balance' : 'လက်ကျန်'}: *${displayBalance}*
+✅ *${lang === 'en' ? 'You can pay with balance!' : 'Balance နဲ့ ဝယ်နိုင်ပါတယ်!'}*
 ━━━━━━━━━━━━━━━`
-  }
+    }
 
-  caption += `
+    caption += `
 
 📱 QR Scan သို့မဟုတ် အောက်တွင်ပါရှိသော Address သို့ ငွေလွဲပါ။
 
@@ -2480,12 +2616,10 @@ ${sellerRating}
 ⏰ သက်တမ်း: *1 နာရီအတွင်း* ငွေပို့ပါ
 ⚠️ ပစ္စည်းမရမီ "ရရှိပြီး" မနှိပ်ပါ!`
 
-  // Send QR with expiry warning and store message ID
-  const msgId = await sendPhoto(chatId, qr, caption, buyBtns(tx.id, hasEnoughBalance))
-
-  // Store buyer message ID for auto-deletion on expiry
-  if (msgId) {
-    await supabase.from('transactions').update({ buyer_msg_id: msgId }).eq('id', tx.id)
+    const msgId = await sendPhoto(chatId, qr, caption, buyBtns(tx.id, hasEnoughBalance))
+    if (msgId) {
+      await supabase.from('transactions').update({ buyer_msg_id: msgId }).eq('id', tx.id)
+    }
   }
 }
 
@@ -2508,8 +2642,16 @@ async function handleBuyWithBalance(chatId: number, msgId: number, txId: string,
   }
 
   const profile = await getProfile(telegramId, username)
-  const balance = Number(profile.balance)
-  const amount = Number(tx.amount_ton)
+  const lang = (profile.language || 'my') as Language
+  
+  // Determine currency
+  const txCurrency = tx.currency || 'TON'
+  const isMMK = txCurrency === 'MMK'
+  const currencyIcon = isMMK ? '💵' : '💎'
+  
+  // Get appropriate amount and balance based on currency
+  const amount = isMMK ? Number(tx.amount_mmk || 0) : Number(tx.amount_ton)
+  const balance = isMMK ? Number(profile.balance_mmk || 0) : Number(profile.balance)
 
   if (balance < amount) {
     await answerCb(cbId, '❌ လက်ကျန်ငွေ မလုံလောက်ပါ', true)
@@ -2518,48 +2660,87 @@ async function handleBuyWithBalance(chatId: number, msgId: number, txId: string,
 
   await answerCb(cbId, '🔄 စစ်ဆေးနေသည်...')
 
-  // Step 1: Show processing animation
-  const processingQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('PROCESSING...')}&bgcolor=FFF9C4`
-  await editMessageMedia(chatId, msgId, processingQR, `⏳ *ငွေပေးချေနေသည်...*
+  const displayAmount = isMMK ? `${amount.toLocaleString()} MMK` : `${amount} TON`
+  
+  // Step 1: Show processing animation - use editText for MMK (no photo message)
+  if (isMMK) {
+    await editText(chatId, msgId, `⏳ *${lang === 'en' ? 'Processing payment...' : 'ငွေပေးချေနေသည်...'}*
 
 ━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *${amount} TON*
+${currencyIcon} *${displayAmount}*
 ━━━━━━━━━━━━━━━
 
 🔄 Balance မှ ဖြတ်တောက်နေသည်...`)
+  } else {
+    const processingQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('PROCESSING...')}&bgcolor=FFF9C4`
+    await editMessageMedia(chatId, msgId, processingQR, `⏳ *${lang === 'en' ? 'Processing payment...' : 'ငွေပေးချေနေသည်...'}*
+
+━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+${currencyIcon} *${displayAmount}*
+━━━━━━━━━━━━━━━
+
+🔄 Balance မှ ဖြတ်တောက်နေသည်...`)
+  }
 
   await new Promise(r => setTimeout(r, 600))
 
-  // Deduct from buyer's balance
+  // Deduct from buyer's balance (correct currency)
   const newBuyerBalance = balance - amount
-  await supabase.from('profiles').update({ balance: newBuyerBalance }).eq('id', profile.id)
+  if (isMMK) {
+    await supabase.from('profiles').update({ balance_mmk: newBuyerBalance }).eq('id', profile.id)
+  } else {
+    await supabase.from('profiles').update({ balance: newBuyerBalance }).eq('id', profile.id)
+  }
 
   // Update transaction to payment_received
   await supabase.from('transactions').update({
     status: 'payment_received',
-    ton_tx_hash: `balance_${Date.now()}`, // Mark as balance payment
+    ton_tx_hash: `balance_${txCurrency}_${Date.now()}`, // Mark as balance payment with currency
   }).eq('id', tx.id)
 
-  // Step 2: Show success with celebration
-  const successQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('PAID!')}&bgcolor=90EE90`
-  await editMessageMedia(chatId, msgId, successQR, `🎉 *Balance ဖြင့် ဝယ်ယူပြီး!*
+  const newDisplayBalance = isMMK ? `${newBuyerBalance.toLocaleString()} MMK` : `${newBuyerBalance.toFixed(2)} TON`
+
+  // Step 2: Show success
+  if (isMMK) {
+    await editText(chatId, msgId, `🎉 *${lang === 'en' ? 'Paid with Balance!' : 'Balance ဖြင့် ဝယ်ယူပြီး!'}*
 
 ╔══════════════════════════════╗
 ║                              ║
-║      ✅ *ငွေပေးချေပြီး*       ║
+║      ✅ *${lang === 'en' ? 'PAYMENT COMPLETE' : 'ငွေပေးချေပြီး'}*       ║
 ║                              ║
 ╚══════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *${amount} TON*
+${currencyIcon} *${displayAmount}*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💳 လက်ကျန်: *${newBuyerBalance.toFixed(2)} TON*
+💳 ${lang === 'en' ? 'Remaining Balance' : 'လက်ကျန်'}: *${newDisplayBalance}*
 
-⏳ ရောင်းသူထံမှ ပစ္စည်း ပို့ပေးမည်ဖြစ်ပါသည်။
-⚠️ *ပစ္စည်းမရရှိမှီ "ရရှိပြီး" မနှိပ်ပါနှင့်*`, buyerBtns(tx.id, tx.seller?.telegram_username))
+⏳ ${lang === 'en' ? 'Seller will send the item.' : 'ရောင်းသူထံမှ ပစ္စည်း ပို့ပေးမည်ဖြစ်ပါသည်။'}
+⚠️ *${lang === 'en' ? 'Do not click "Received" before receiving the item!' : 'ပစ္စည်းမရရှိမှီ "ရရှိပြီး" မနှိပ်ပါနှင့်'}*`, buyerBtns(tx.id, tx.seller?.telegram_username))
+  } else {
+    const successQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent('PAID!')}&bgcolor=90EE90`
+    await editMessageMedia(chatId, msgId, successQR, `🎉 *${lang === 'en' ? 'Paid with Balance!' : 'Balance ဖြင့် ဝယ်ယူပြီး!'}*
+
+╔══════════════════════════════╗
+║                              ║
+║      ✅ *${lang === 'en' ? 'PAYMENT COMPLETE' : 'ငွေပေးချေပြီး'}*       ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+${currencyIcon} *${displayAmount}*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💳 ${lang === 'en' ? 'Remaining Balance' : 'လက်ကျန်'}: *${newDisplayBalance}*
+
+⏳ ${lang === 'en' ? 'Seller will send the item.' : 'ရောင်းသူထံမှ ပစ္စည်း ပို့ပေးမည်ဖြစ်ပါသည်။'}
+⚠️ *${lang === 'en' ? 'Do not click "Received" before receiving the item!' : 'ပစ္စည်းမရရှိမှီ "ရရှိပြီး" မနှိပ်ပါနှင့်'}*`, buyerBtns(tx.id, tx.seller?.telegram_username))
+  }
 
   // Notify seller
   if (tx.seller?.telegram_id) {
@@ -2567,31 +2748,31 @@ async function handleBuyWithBalance(chatId: number, msgId: number, txId: string,
       ? `@${profile.telegram_username}` 
       : `ID: ${profile.telegram_id || 'Unknown'}`
     
-    await sendMessage(tx.seller.telegram_id, `🎉 *အော်ဒါအသစ် ရရှိပြီး!*
+    await sendMessage(tx.seller.telegram_id, `🎉 *${lang === 'en' ? 'New Order Received!' : 'အော်ဒါအသစ် ရရှိပြီး!'}*
 
 ╔══════════════════════════════╗
 ║                              ║
-║      💰 *ငွေလက်ခံပြီး*        ║
+║      💰 *${lang === 'en' ? 'PAYMENT RECEIVED' : 'ငွေလက်ခံပြီး'}*        ║
 ║                              ║
 ╚══════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *${amount.toFixed(4)} TON*
-👤 *ဝယ်သူ:* ${buyerUsername}
+${currencyIcon} *${displayAmount}*
+👤 *${lang === 'en' ? 'Buyer' : 'ဝယ်သူ'}:* ${buyerUsername}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-✅ ဝယ်သူမှ Balance ဖြင့် ငွေပေးချေပြီးပါပြီ
+✅ ${lang === 'en' ? 'Buyer paid with balance' : 'ဝယ်သူမှ Balance ဖြင့် ငွေပေးချေပြီးပါပြီ'}
 
-📦 *ပစ္စည်းပို့ရန်:*
-1️⃣ ဝယ်သူနှင့် Chat လုပ်ပြီး ပစ္စည်းပို့ပါ
-2️⃣ ပို့ပြီးပါက "ပို့ပြီး" ခလုပ်နှိပ်ပါ
+📦 *${lang === 'en' ? 'To send item' : 'ပစ္စည်းပို့ရန်'}:*
+1️⃣ ${lang === 'en' ? 'Chat with buyer and send item' : 'ဝယ်သူနှင့် Chat လုပ်ပြီး ပစ္စည်းပို့ပါ'}
+2️⃣ ${lang === 'en' ? 'Click "Sent" when done' : 'ပို့ပြီးပါက "ပို့ပြီး" ခလုပ်နှိပ်ပါ'}
 
-⚠️ *သတိ:* ပစ္စည်းမပို့မီ "ပို့ပြီး" မနှိပ်ပါနှင့်`, sellerBtns(tx.id, profile.telegram_username))
+⚠️ *${lang === 'en' ? 'Warning' : 'သတိ'}:* ${lang === 'en' ? 'Do not click "Sent" before sending' : 'ပစ္စည်းမပို့မီ "ပို့ပြီး" မနှိပ်ပါနှင့်'}`, sellerBtns(tx.id, profile.telegram_username))
   }
 
-  // Notify admin for high-value transactions (>= 50 TON)
-  const HIGH_VALUE_THRESHOLD = 50
+  // Notify admin for high-value transactions
+  const HIGH_VALUE_THRESHOLD = isMMK ? 500000 : 50 // 500k MMK or 50 TON
   if (amount >= HIGH_VALUE_THRESHOLD) {
     try {
       await fetch(`${SUPABASE_URL}/functions/v1/notify-user`, {
@@ -2603,13 +2784,14 @@ async function handleBuyWithBalance(chatId: number, msgId: number, txId: string,
         body: JSON.stringify({
           type: 'admin_high_value_tx',
           amount: amount,
+          currency: txCurrency,
           product_title: tx.products?.title,
           buyer_username: profile.telegram_username,
           seller_username: tx.seller?.telegram_username,
-          tx_hash: `balance_${Date.now()}`
+          tx_hash: `balance_${txCurrency}_${Date.now()}`
         })
       })
-      console.log(`Admin notified about high-value balance purchase: ${amount} TON`)
+      console.log(`Admin notified about high-value balance purchase: ${amount} ${txCurrency}`)
     } catch (e) {
       console.error('Failed to notify admin about high-value tx:', e)
     }
@@ -2795,10 +2977,27 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
   // Process referral earnings - credit to referrer's balance immediately
   await processReferralEarnings(txId, Number(tx.commission_ton), tx.buyer?.id || null)
 
-  // Credit seller
+  // Determine currency and credit seller appropriately
+  const txCurrency = tx.currency || 'TON'
+  const isMMK = txCurrency === 'MMK'
+  const currencyIcon = isMMK ? '💵' : '💎'
+  
+  // Get the amount to credit based on currency
+  const creditAmount = isMMK ? Number(tx.amount_mmk || 0) : Number(tx.seller_receives_ton)
+  const displayAmount = isMMK ? `${creditAmount.toLocaleString()} MMK` : `${creditAmount.toFixed(2)} TON`
+
+  // Credit seller with correct currency
   if (tx.seller) {
-    const newBal = Number(tx.seller.balance) + Number(tx.seller_receives_ton)
-    await supabase.from('profiles').update({ balance: newBal }).eq('id', tx.seller.id)
+    let newBal: number
+    if (isMMK) {
+      newBal = Number(tx.seller.balance_mmk || 0) + creditAmount
+      await supabase.from('profiles').update({ balance_mmk: newBal }).eq('id', tx.seller.id)
+    } else {
+      newBal = Number(tx.seller.balance) + creditAmount
+      await supabase.from('profiles').update({ balance: newBal }).eq('id', tx.seller.id)
+    }
+    
+    const displayNewBal = isMMK ? `${newBal.toLocaleString()} MMK` : `${newBal.toFixed(2)} TON`
 
     // Notify admin about completed transaction
     try {
@@ -2810,7 +3009,8 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
         },
         body: JSON.stringify({
           type: 'admin_transaction_completed',
-          amount: tx.amount_ton,
+          amount: isMMK ? tx.amount_mmk : tx.amount_ton,
+          currency: txCurrency,
           product_title: tx.products?.title,
           buyer_username: tx.buyer?.telegram_username,
           seller_username: tx.seller?.telegram_username
@@ -2833,10 +3033,10 @@ async function handleConfirmReceived(chatId: number, msgId: number, txId: string
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *+${Number(tx.seller_receives_ton).toFixed(2)} TON*
+${currencyIcon} *+${displayAmount}*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💳 လက်ကျန်: *${newBal.toFixed(2)} TON*
+💳 လက်ကျန်: *${displayNewBal}*
 
 ✅ ဝယ်သူမှ ပစ္စည်းရရှိကြောင်း အတည်ပြုပြီးပါပြီ
 💰 သင်၏ Balance ထဲသို့ ငွေထည့်သွင်းပြီးပါပြီ
@@ -3661,7 +3861,7 @@ Bot ကောင်းစွာအလုပ်လုပ်နေပါသည်!
   
   // Step-by-step sell flow
   if (state?.action === 'sell_title' && state.msgId) {
-    await handleSellTitle(chatId, text, state.msgId)
+    await handleSellTitle(chatId, text, state.msgId, username)
     await deleteMsg(chatId, inMsgId)
     return
   }
@@ -3810,7 +4010,7 @@ async function handleCallback(cb: { id: string; from: { id: number; username?: s
     await answerCb(cb.id)
     switch (action) {
       case 'home': await showHome(chatId, msgId, username); break
-      case 'sell': await showSellPrompt(chatId, msgId); break
+      case 'sell': await showSellPrompt(chatId, msgId, username); break
       case 'dep': await showDepositOptions(chatId, msgId, username); break
       case 'wd': await showWithdrawOptions(chatId, msgId, username); break
       case 'bal': await showBalance(chatId, msgId, username); break
@@ -3834,6 +4034,16 @@ async function handleCallback(cb: { id: string; from: { id: number; username?: s
       await supabase.from('profiles').update({ language: newLang }).eq('id', profile.id)
       await sendMessage(chatId, t(newLang, 'lang.changed'))
       await showHome(chatId, msgId, username)
+    }
+    return
+  }
+
+  // Sell currency selection
+  if (type === 'sc') {
+    await answerCb(cb.id)
+    const currency = action // TON or MMK
+    if (currency === 'TON' || currency === 'MMK') {
+      await showSellTitlePrompt(chatId, msgId, currency, username)
     }
     return
   }
