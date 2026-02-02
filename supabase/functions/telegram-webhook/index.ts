@@ -1278,6 +1278,105 @@ async function showDepositMMKInstructions(chatId: number, msgId: number, amount:
   await setUserState(chatId, { action: 'dep_mmk_screenshot', msgId: newMsgId || undefined, data: { amount, paymentMethod, uniqueCode } })
 }
 
+// Handle MMK deposit screenshot upload
+async function handleMMKDepositScreenshot(
+  chatId: number, 
+  photos: Array<{ file_id: string; file_unique_id: string; width: number; height: number }>,
+  stateData: { amount?: number; paymentMethod?: string; uniqueCode?: string },
+  username?: string
+) {
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
+  
+  // Get the largest photo (best quality)
+  const largestPhoto = photos.reduce((prev, curr) => 
+    (curr.width * curr.height) > (prev.width * prev.height) ? curr : prev
+  )
+  
+  try {
+    // Get file path from Telegram
+    const fileRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id: largestPhoto.file_id }),
+    })
+    const fileData = await fileRes.json()
+    
+    if (!fileData.ok || !fileData.result?.file_path) {
+      await sendMessage(chatId, `❌ *${lang === 'en' ? 'Failed to process photo' : 'ဓာတ်ပုံ process မရပါ'}*
+
+${lang === 'en' ? 'Please try again' : 'ထပ်မံကြိုးစားပါ'}`, cancelBtn(lang))
+      return
+    }
+    
+    // Download photo from Telegram
+    const photoUrl = `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${fileData.result.file_path}`
+    const photoResponse = await fetch(photoUrl)
+    const photoBlob = await photoResponse.arrayBuffer()
+    
+    // Upload to Supabase Storage
+    const fileName = `${stateData.uniqueCode}_${Date.now()}.jpg`
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('deposit-screenshots')
+      .upload(fileName, photoBlob, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      })
+    
+    if (uploadError) {
+      console.error('Screenshot upload error:', uploadError)
+      await sendMessage(chatId, `❌ *${lang === 'en' ? 'Failed to upload screenshot' : 'Screenshot တင်မရပါ'}*
+
+${lang === 'en' ? 'Please try again' : 'ထပ်မံကြိုးစားပါ'}`, cancelBtn(lang))
+      return
+    }
+    
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('deposit-screenshots')
+      .getPublicUrl(fileName)
+    
+    const screenshotUrl = urlData.publicUrl
+    
+    // Update deposit with screenshot URL
+    await supabase
+      .from('deposits')
+      .update({ screenshot_url: screenshotUrl })
+      .eq('unique_code', stateData.uniqueCode)
+      .eq('profile_id', profile.id)
+    
+    // Clear user state
+    await deleteUserState(chatId)
+    
+    // Send success message
+    const successText = `✅ *${lang === 'en' ? 'Screenshot Uploaded!' : 'Screenshot တင်ပြီးပါပြီ!'}*
+
+╔══════════════════════════════╗
+║                              ║
+║     📸 *SCREENSHOT SENT*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *${lang === 'en' ? 'Amount' : 'ပမာဏ'}:* ${Number(stateData.amount).toLocaleString()} MMK
+🔑 *Code:* \`${stateData.uniqueCode}\`
+📱 *${lang === 'en' ? 'Payment' : 'ငွေပေးချေမှု'}:* ${stateData.paymentMethod === 'KBZPAY' ? 'KBZPay' : 'WavePay'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⏳ *${lang === 'en' ? 'Admin will verify and credit your balance' : 'Admin စစ်ဆေးပြီး Balance ထည့်ပေးပါမည်'}*
+
+💡 *${lang === 'en' ? 'Note' : 'မှတ်ချက်'}:* ${lang === 'en' ? 'You will receive a notification when approved' : 'အတည်ပြုပြီးပါက အကြောင်းကြားပါမည်'}`
+    
+    await sendMessage(chatId, successText, backBtn(lang))
+    
+  } catch (error) {
+    console.error('Screenshot handling error:', error)
+    await sendMessage(chatId, `❌ *${lang === 'en' ? 'Error processing screenshot' : 'Screenshot process မရပါ'}*
+
+${lang === 'en' ? 'Please try again' : 'ထပ်မံကြိုးစားပါ'}`, cancelBtn(lang))
+  }
+}
+
 // Show MMK withdraw phone prompt
 async function showWithdrawMMKPhonePrompt(chatId: number, msgId: number, amount: number, paymentMethod: string, username?: string) {
   const profile = await getProfile(chatId, username)
@@ -2908,7 +3007,7 @@ async function handleAdminDisputeResolve(chatId: number, msgId: number, txLink: 
 }
 
 // ==================== MAIN HANDLERS ====================
-async function handleMessage(msg: { chat: { id: number }; from?: { username?: string }; text?: string; message_id: number }) {
+async function handleMessage(msg: { chat: { id: number }; from?: { username?: string }; text?: string; message_id: number; photo?: Array<{ file_id: string; file_unique_id: string; width: number; height: number }> }) {
   const chatId = msg.chat.id
   const username = msg.from?.username
   const text = msg.text?.trim() || ''
@@ -3032,6 +3131,16 @@ Bot ကောင်းစွာအလုပ်လုပ်နေပါသည်!
   }
 
   // All navigation is via inline keyboard callbacks - no text keyboard handlers needed
+
+  // Handle photo upload for MMK deposit screenshot
+  if (msg.photo && msg.photo.length > 0) {
+    const state = await getUserState(chatId)
+    if (state?.action === 'dep_mmk_screenshot' && state.data?.uniqueCode) {
+      await handleMMKDepositScreenshot(chatId, msg.photo, state.data, username)
+      await deleteMsg(chatId, inMsgId)
+      return
+    }
+  }
 
   // State handling
   const state = await getUserState(chatId)
