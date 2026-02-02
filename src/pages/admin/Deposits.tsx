@@ -223,16 +223,37 @@ export default function AdminDeposits() {
       // Credit user's MMK balance
       const { data: profile } = await supabase
         .from('profiles')
-        .select('balance_mmk')
+        .select('balance_mmk, telegram_id')
         .eq('id', deposit.profile_id)
         .single();
 
+      let newBalance = 0;
       if (profile) {
-        const newBalance = Number(profile.balance_mmk || 0) + Number(deposit.amount_ton);
+        newBalance = Number(profile.balance_mmk || 0) + Number(deposit.amount_ton);
         await supabase
           .from('profiles')
           .update({ balance_mmk: newBalance })
           .eq('id', deposit.profile_id);
+      }
+
+      // Send Telegram notification to user
+      if (profile?.telegram_id) {
+        try {
+          await supabase.functions.invoke('notify-user', {
+            body: {
+              type: 'mmk_deposit_approved',
+              telegram_id: profile.telegram_id,
+              amount: deposit.amount_ton,
+              currency: 'MMK',
+              payment_method: deposit.payment_method,
+              unique_code: deposit.unique_code,
+              new_balance: newBalance,
+              admin_notes: approvalNotes || null,
+            },
+          });
+        } catch (notifyError) {
+          console.error('Failed to send notification:', notifyError);
+        }
       }
 
       toast({
@@ -259,6 +280,13 @@ export default function AdminDeposits() {
   const handleRejectDeposit = async (deposit: Deposit) => {
     setIsProcessing(true);
     try {
+      // Get user telegram_id first
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('telegram_id')
+        .eq('id', deposit.profile_id)
+        .single();
+
       await supabase
         .from('deposits')
         .update({
@@ -266,6 +294,25 @@ export default function AdminDeposits() {
           admin_notes: approvalNotes || 'ငြင်းပယ်ခံရပါပြီ',
         })
         .eq('id', deposit.id);
+
+      // Send Telegram notification to user
+      if (profile?.telegram_id) {
+        try {
+          await supabase.functions.invoke('notify-user', {
+            body: {
+              type: 'mmk_deposit_rejected',
+              telegram_id: profile.telegram_id,
+              amount: deposit.amount_ton,
+              currency: 'MMK',
+              payment_method: deposit.payment_method,
+              unique_code: deposit.unique_code,
+              admin_notes: approvalNotes || 'ငြင်းပယ်ခံရပါပြီ',
+            },
+          });
+        } catch (notifyError) {
+          console.error('Failed to send notification:', notifyError);
+        }
+      }
 
       toast({
         title: "ငြင်းပယ်ပြီး",
