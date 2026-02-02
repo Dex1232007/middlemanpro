@@ -33,7 +33,7 @@ async function sendTelegramMessage(chatId: number, text: string, parseMode = 'Ma
 }
 
 interface NotifyRequest {
-  type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx' | 'admin_new_deposit' | 'admin_transaction_completed' | 'mmk_deposit_approved' | 'mmk_deposit_rejected'
+  type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx' | 'admin_new_deposit' | 'admin_transaction_completed' | 'mmk_deposit_approved' | 'mmk_deposit_rejected' | 'admin_new_mmk_withdrawal' | 'mmk_withdrawal_approved' | 'mmk_withdrawal_rejected'
   profile_id?: string
   telegram_id?: number
   amount?: number
@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
     let telegramId = body.telegram_id
 
     // For admin notifications, get admin telegram ID from settings
-    if (body.type === 'admin_new_dispute' || body.type === 'admin_new_withdrawal' || body.type === 'admin_high_value_tx' || body.type === 'admin_new_deposit' || body.type === 'admin_transaction_completed') {
+    if (body.type === 'admin_new_dispute' || body.type === 'admin_new_withdrawal' || body.type === 'admin_high_value_tx' || body.type === 'admin_new_deposit' || body.type === 'admin_transaction_completed' || body.type === 'admin_new_mmk_withdrawal') {
       const { data: adminSetting } = await adminSupabase
         .from('settings')
         .select('value')
@@ -347,6 +347,73 @@ ${body.admin_notes ? `📝 *မှတ်ချက်:* ${body.admin_notes}` : ''
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 ${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${body.admin_notes}\n` : ''}
 ⚠️ ပြန်လည်ကြိုးစားလိုပါက ငွေသွင်းမှုအသစ် ပြုလုပ်ပါ။`
+        break
+
+      case 'admin_new_mmk_withdrawal':
+        const mmkMethodName = body.payment_method === 'KBZPAY' ? 'KBZPay' : body.payment_method === 'WAVEPAY' ? 'WavePay' : 'MMK'
+        const mmkMethodIcon = body.payment_method === 'KBZPAY' ? '📱' : '📲'
+        message = `💵 *MMK ငွေထုတ်ယူမှု အသစ်!*
+
+╔══════════════════════════════╗
+║                              ║
+║   ${mmkMethodIcon} *NEW MMK WITHDRAWAL*   ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${Number(body.amount).toLocaleString()} MMK
+${mmkMethodIcon} *Payment:* ${mmkMethodName}
+📱 *Phone:* \`${body.destination_wallet}\`
+👤 *အသုံးပြုသူ:* ${body.user_telegram_username ? `@${body.user_telegram_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⏳ Admin Dashboard မှ အတည်ပြုရန် စောင့်နေသည်`
+        break
+
+      case 'mmk_withdrawal_approved':
+        const approvedMethodName = body.payment_method === 'KBZPAY' ? 'KBZPay' : body.payment_method === 'WAVEPAY' ? 'WavePay' : 'MMK'
+        const approvedMethodIcon = body.payment_method === 'KBZPAY' ? '📱' : '📲'
+        message = `✅ *ငွေထုတ်ယူမှု အတည်ပြုပြီးပါပြီ!*
+
+╔══════════════════════════════╗
+║                              ║
+║   ${approvedMethodIcon} *WITHDRAWAL APPROVED*  ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${Number(body.amount).toLocaleString()} MMK
+${approvedMethodIcon} *Payment:* ${approvedMethodName}
+📱 *Phone:* \`${body.destination_wallet}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${body.tx_hash ? `\n🔗 *Reference:* \`${body.tx_hash}\`\n` : ''}
+${body.admin_notes ? `📝 *မှတ်ချက်:* ${body.admin_notes}\n` : ''}
+💰 *လက်ကျန်ငွေ:* ${Number(body.new_balance || 0).toLocaleString()} MMK
+
+✅ သင့်ဖုန်းသို့ ငွေပို့ပြီးပါပြီ။`
+        break
+
+      case 'mmk_withdrawal_rejected':
+        const rejectedMethodName = body.payment_method === 'KBZPAY' ? 'KBZPay' : body.payment_method === 'WAVEPAY' ? 'WavePay' : 'MMK'
+        const rejectedMethodIcon = body.payment_method === 'KBZPAY' ? '📱' : '📲'
+        message = `❌ *ငွေထုတ်ယူမှု ငြင်းပယ်ခံရပါပြီ*
+
+╔══════════════════════════════╗
+║                              ║
+║   ${rejectedMethodIcon} *WITHDRAWAL REJECTED*  ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${Number(body.amount).toLocaleString()} MMK
+${rejectedMethodIcon} *Payment:* ${rejectedMethodName}
+📱 *Phone:* \`${body.destination_wallet}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${body.admin_notes}\n` : ''}
+💰 *လက်ကျန်ငွေ:* ${Number(body.new_balance || 0).toLocaleString()} MMK
+   _(ငွေပြန်ထည့်ပေးပြီးပါပြီ)_
+
+⚠️ ပြန်လည်ကြိုးစားလိုပါက ငွေထုတ်ယူမှုအသစ် ပြုလုပ်ပါ။`
         break
 
       case 'custom':

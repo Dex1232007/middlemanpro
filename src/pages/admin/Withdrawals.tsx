@@ -171,18 +171,20 @@ export default function AdminWithdrawals() {
     setIsProcessing(true);
     try {
       const newStatus: WithdrawalStatus = dialogAction === 'approve' ? 'approved' : 'rejected';
+      const isMMK = selectedWithdrawal.currency === 'MMK';
       
       // Get user's current profile
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('balance, telegram_id')
+        .select('balance, balance_mmk, telegram_id')
         .eq('id', selectedWithdrawal.profile_id)
         .single();
 
       if (profileError) throw profileError;
 
-      const currentBalance = Number(profile?.balance || 0);
+      const currentBalance = isMMK ? Number(profile?.balance_mmk || 0) : Number(profile?.balance || 0);
       const withdrawAmount = Number(selectedWithdrawal.amount_ton);
+      let newBalance = currentBalance;
 
       // If approving, deduct from user's balance
       // Note: Balance is only deducted here, NOT when user creates the withdrawal request
@@ -193,10 +195,13 @@ export default function AdminWithdrawals() {
           return;
         }
 
+        newBalance = currentBalance - withdrawAmount;
+        
         // Deduct balance only on admin approval
+        const updateField = isMMK ? { balance_mmk: newBalance } : { balance: newBalance };
         const { error: balanceError } = await supabase
           .from('profiles')
-          .update({ balance: currentBalance - withdrawAmount })
+          .update(updateField)
           .eq('id', selectedWithdrawal.profile_id);
 
         if (balanceError) throw balanceError;
@@ -218,13 +223,21 @@ export default function AdminWithdrawals() {
 
       // Send notification via edge function
       try {
+        const notificationType = isMMK
+          ? (dialogAction === 'approve' ? 'mmk_withdrawal_approved' : 'mmk_withdrawal_rejected')
+          : (dialogAction === 'approve' ? 'withdrawal_approved' : 'withdrawal_rejected');
+
         await supabase.functions.invoke('notify-user', {
           body: {
-            type: dialogAction === 'approve' ? 'withdrawal_approved' : 'withdrawal_rejected',
+            type: notificationType,
             profile_id: selectedWithdrawal.profile_id,
             amount: selectedWithdrawal.amount_ton,
             tx_hash: txHash || null,
             admin_notes: adminNotes || null,
+            currency: selectedWithdrawal.currency,
+            payment_method: selectedWithdrawal.payment_method,
+            destination_wallet: selectedWithdrawal.destination_wallet,
+            new_balance: newBalance,
           },
         });
       } catch (notifyError) {
