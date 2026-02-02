@@ -293,14 +293,42 @@ const cancelBtn = (lang: Language = "my") => ({
 });
 
 // Deposit payment method selection
-const depositMethodBtn = (lang: Language = "my") => ({
-  inline_keyboard: [
+interface PaymentMethodSettings {
+  kbzpayEnabled: boolean;
+  wavepayEnabled: boolean;
+}
+
+async function getPaymentMethodSettings(): Promise<PaymentMethodSettings> {
+  const { data } = await supabase
+    .from("settings")
+    .select("key, value")
+    .in("key", ["kbzpay_enabled", "wavepay_enabled"]);
+  
+  const settingsMap = new Map(data?.map(s => [s.key, s.value === 'true']) || []);
+  return {
+    kbzpayEnabled: settingsMap.get("kbzpay_enabled") ?? true, // Default to true if not set
+    wavepayEnabled: settingsMap.get("wavepay_enabled") ?? true,
+  };
+}
+
+const depositMethodBtn = (lang: Language = "my", settings?: PaymentMethodSettings) => {
+  const buttons: { text: string; callback_data: string }[][] = [
     [{ text: t(lang, "deposit.ton_auto"), callback_data: "dpm:TON" }],
-    [{ text: t(lang, "deposit.kbzpay"), callback_data: "dpm:KBZPAY" }],
-    [{ text: t(lang, "deposit.wavepay"), callback_data: "dpm:WAVEPAY" }],
-    [{ text: t(lang, "menu.home"), callback_data: "m:home" }],
-  ],
-});
+  ];
+  
+  // Only show KBZPay if enabled
+  if (settings?.kbzpayEnabled !== false) {
+    buttons.push([{ text: t(lang, "deposit.kbzpay"), callback_data: "dpm:KBZPAY" }]);
+  }
+  // Only show WavePay if enabled
+  if (settings?.wavepayEnabled !== false) {
+    buttons.push([{ text: t(lang, "deposit.wavepay"), callback_data: "dpm:WAVEPAY" }]);
+  }
+  
+  buttons.push([{ text: t(lang, "menu.home"), callback_data: "m:home" }]);
+  
+  return { inline_keyboard: buttons };
+};
 
 // TON deposit amounts
 const depositAmountsTON = (lang: Language = "my") => ({
@@ -376,13 +404,27 @@ const withdrawAmountsMMK = (balance: number, lang: Language = "my") => {
 };
 
 // MMK withdraw method selection
-const withdrawMethodMMK = (lang: Language = "my") => ({
-  inline_keyboard: [
-    [{ text: "📱 KBZPay", callback_data: "wmm:KBZPAY" }],
-    [{ text: "📲 WavePay", callback_data: "wmm:WAVEPAY" }],
-    [{ text: t(lang, "menu.back"), callback_data: "wc:MMK" }],
-  ],
-});
+const withdrawMethodMMK = (lang: Language = "my", settings?: PaymentMethodSettings) => {
+  const buttons: { text: string; callback_data: string }[][] = [];
+  
+  // Only show KBZPay if enabled
+  if (settings?.kbzpayEnabled !== false) {
+    buttons.push([{ text: "📱 KBZPay", callback_data: "wmm:KBZPAY" }]);
+  }
+  // Only show WavePay if enabled
+  if (settings?.wavepayEnabled !== false) {
+    buttons.push([{ text: "📲 WavePay", callback_data: "wmm:WAVEPAY" }]);
+  }
+  
+  // If both are disabled, show a message button
+  if (buttons.length === 0) {
+    buttons.push([{ text: "❌ MMK ထုတ်ယူခြင်း ပိတ်ထားပါသည်", callback_data: "m:home" }]);
+  }
+  
+  buttons.push([{ text: t(lang, "menu.back"), callback_data: "wc:MMK" }]);
+  
+  return { inline_keyboard: buttons };
+};
 
 // Language selection
 const languageBtn = (currentLang: Language = "my") => ({
@@ -426,18 +468,35 @@ const confirmBtns = (txId: string) => ({
 });
 
 // Buy buttons with balance option
-const buyBtns = (txId: string, hasBalance: boolean, lang: Language = 'my') => ({
-  inline_keyboard: hasBalance
-    ? [
+const buyBtns = (txId: string, hasBalance: boolean, lang: Language = 'my', settings?: PaymentMethodSettings) => {
+  if (hasBalance) {
+    return {
+      inline_keyboard: [
         [{ text: "💰 Balance ဖြင့်ဝယ်မည်", callback_data: `buy:bal:${txId}` }],
         [{ text: "🏠 ပင်မစာမျက်နှာ", callback_data: "m:home" }],
-      ]
-    : [
-        [{ text: t(lang, "deposit.kbzpay"), callback_data: "dpm:KBZPAY" }],
-        [{ text: t(lang, "deposit.wavepay"), callback_data: "dpm:WAVEPAY" }],
-        [{ text: "🏠 ပင်မစာမျက်နှာ", callback_data: "m:home" }],
       ],
-});
+    };
+  }
+  
+  // No balance - show deposit options based on enabled payment methods
+  const buttons: { text: string; callback_data: string }[][] = [];
+  
+  if (settings?.kbzpayEnabled !== false) {
+    buttons.push([{ text: t(lang, "deposit.kbzpay"), callback_data: "dpm:KBZPAY" }]);
+  }
+  if (settings?.wavepayEnabled !== false) {
+    buttons.push([{ text: t(lang, "deposit.wavepay"), callback_data: "dpm:WAVEPAY" }]);
+  }
+  
+  // If no MMK methods available, show TON deposit option
+  if (buttons.length === 0) {
+    buttons.push([{ text: "💎 TON ငွေသွင်းမည်", callback_data: "dpm:TON" }]);
+  }
+  
+  buttons.push([{ text: "🏠 ပင်မစာမျက်နှာ", callback_data: "m:home" }]);
+  
+  return { inline_keyboard: buttons };
+};
 
 // Rating buttons (1-5 stars)
 // IMPORTANT: Telegram callback_data has a 64-byte limit.
@@ -1069,8 +1128,18 @@ ${lang === "en" ? "Example" : "ဥပမာ"}: \`iPhone 15 Pro Max\``;
 async function showDepositOptions(chatId: number, msgId: number, username?: string) {
   const profile = await getProfile(chatId, username);
   const lang = (profile.language || "my") as Language;
+  const paymentSettings = await getPaymentMethodSettings();
 
   await setUserState(chatId, { action: "dep_method_select", msgId });
+  
+  // Build description based on enabled methods
+  const mmkMethods: string[] = [];
+  if (paymentSettings.kbzpayEnabled) mmkMethods.push("KBZPay");
+  if (paymentSettings.wavepayEnabled) mmkMethods.push("WavePay");
+  const mmkLine = mmkMethods.length > 0 
+    ? `📱 *${mmkMethods.join("/")}* - Manual (Admin စစ်ဆေးပေးမည်)`
+    : "";
+
   const text = `${t(lang, "deposit.title")}
 
 ╔══════════════════════════════╗
@@ -1083,13 +1152,12 @@ async function showDepositOptions(chatId: number, msgId: number, username?: stri
 ${t(lang, "deposit.select_method")}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💎 *TON* - Auto Credit (Blockchain)
-📱 *KBZPay/WavePay* - Manual (Admin စစ်ဆေးပေးမည်)`;
+💎 *TON* - Auto Credit (Blockchain)${mmkLine ? "\n" + mmkLine : ""}`;
 
-  const edited = await editText(chatId, msgId, text, depositMethodBtn(lang));
+  const edited = await editText(chatId, msgId, text, depositMethodBtn(lang, paymentSettings));
   if (!edited) {
     await deleteMsg(chatId, msgId);
-    const newMsg = await sendMessage(chatId, text, depositMethodBtn(lang));
+    const newMsg = await sendMessage(chatId, text, depositMethodBtn(lang, paymentSettings));
     if (newMsg) await setUserState(chatId, { action: "dep_method_select", msgId: newMsg });
   }
 }
@@ -1314,6 +1382,7 @@ ${t(lang, "withdraw.select_amount")}`;
 async function showWithdrawMMKMethod(chatId: number, msgId: number, amount: number, username?: string) {
   const profile = await getProfile(chatId, username);
   const lang = (profile.language || "my") as Language;
+  const paymentSettings = await getPaymentMethodSettings();
 
   const { data: commSetting } = await supabase
     .from("settings")
@@ -1325,7 +1394,12 @@ async function showWithdrawMMKMethod(chatId: number, msgId: number, amount: numb
   const receiveAmount = amount - fee;
 
   await setUserState(chatId, { action: "wm_method", msgId, data: { amount, fee, receiveAmount, currency: "MMK" } });
-  const text = `💵 *MMK ${lang === "en" ? "Withdrawal" : "ငွေထုတ်ရန်"}*
+  
+  // Check if any MMK method is available
+  const hasAnyMethod = paymentSettings.kbzpayEnabled || paymentSettings.wavepayEnabled;
+  
+  const text = hasAnyMethod 
+    ? `💵 *MMK ${lang === "en" ? "Withdrawal" : "ငွေထုတ်ရန်"}*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 💵 *${lang === "en" ? "Amount" : "ထုတ်ယူမည်"}:* ${amount.toLocaleString()} MMK
@@ -1333,12 +1407,19 @@ async function showWithdrawMMKMethod(chatId: number, msgId: number, amount: numb
 ✅ *${lang === "en" ? "You receive" : "လက်ခံရရှိမည်"}:* ${receiveAmount.toLocaleString()} MMK
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${t(lang, "withdraw.select_method")}`;
+${t(lang, "withdraw.select_method")}`
+    : `❌ *MMK Withdrawal Unavailable*
 
-  const edited = await editText(chatId, msgId, text, withdrawMethodMMK(lang));
+━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ ${lang === "en" ? "MMK withdrawal is currently disabled" : "MMK ငွေထုတ်ခြင်း လောလောဆယ် ပိတ်ထားပါသည်"}
+
+${lang === "en" ? "Please try again later or contact admin" : "နောက်မှ ပြန်ကြိုးစားပါ သို့မဟုတ် admin ကို ဆက်သွယ်ပါ"}
+━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  const edited = await editText(chatId, msgId, text, withdrawMethodMMK(lang, paymentSettings));
   if (!edited) {
     await deleteMsg(chatId, msgId);
-    const newMsg = await sendMessage(chatId, text, withdrawMethodMMK(lang));
+    const newMsg = await sendMessage(chatId, text, withdrawMethodMMK(lang, paymentSettings));
     if (newMsg)
       await setUserState(chatId, {
         action: "wm_method",
@@ -2816,6 +2897,7 @@ async function handleBuyLink(chatId: number, link: string, username?: string) {
 
   const profile = await getProfile(chatId, username);
   const lang = (profile.language || "my") as Language;
+  const paymentSettings = await getPaymentMethodSettings();
 
   if (tx.seller_id === profile.id) {
     await sendMessage(chatId, "❌ *ကိုယ်တိုင်ဖန်တီးထားသော ပစ္စည်း ဝယ်၍မရပါ*", mainMenu());
@@ -2900,7 +2982,7 @@ ${sellerRating}
 💰 ${lang === "en" ? "Please deposit MMK first" : "ပထမဦးစွာ MMK ငွေသွင်းပါ"}`;
     }
 
-    const msgId = await sendMessage(chatId, caption, buyBtns(tx.id, hasEnoughBalance));
+    const msgId = await sendMessage(chatId, caption, buyBtns(tx.id, hasEnoughBalance, lang, paymentSettings));
     if (msgId) {
       await supabase.from("transactions").update({ buyer_msg_id: msgId }).eq("id", tx.id);
     }
@@ -2946,7 +3028,7 @@ ${sellerRating}
 ⏰ သက်တမ်း: *1 နာရီအတွင်း* ငွေပို့ပါ
 ⚠️ ပစ္စည်းမရမီ "ရရှိပြီး" မနှိပ်ပါ!`;
 
-    const msgId = await sendPhoto(chatId, qr, caption, buyBtns(tx.id, hasEnoughBalance));
+    const msgId = await sendPhoto(chatId, qr, caption, buyBtns(tx.id, hasEnoughBalance, lang, paymentSettings));
     if (msgId) {
       await supabase.from("transactions").update({ buyer_msg_id: msgId }).eq("id", tx.id);
     }
