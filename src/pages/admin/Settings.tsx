@@ -81,6 +81,11 @@ export default function AdminSettings() {
   const [wavepayAccount, setWavepayAccount] = useState('');
   const [isSavingPaymentAccounts, setIsSavingPaymentAccounts] = useState(false);
 
+  // MMK Payment Method Enable/Disable (for deposits and withdrawals)
+  const [kbzpayEnabled, setKbzpayEnabled] = useState(true);
+  const [wavepayEnabled, setWavepayEnabled] = useState(true);
+  const [isTogglingPaymentMethod, setIsTogglingPaymentMethod] = useState(false);
+
   // Wallet balance states
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -323,6 +328,8 @@ export default function AdminSettings() {
       const schedEnd = data?.find(s => s.key === 'scheduled_maintenance_end');
       const kbzpay = data?.find(s => s.key === 'kbzpay_account');
       const wavepay = data?.find(s => s.key === 'wavepay_account');
+      const kbzpayEn = data?.find(s => s.key === 'kbzpay_enabled');
+      const wavepayEn = data?.find(s => s.key === 'wavepay_enabled');
       
       if (commission) setCommissionRate(commission.value);
       if (wallet) setAdminWallet(wallet.value);
@@ -340,6 +347,9 @@ export default function AdminSettings() {
       if (schedEnd) setScheduleEnd(schedEnd.value);
       if (kbzpay) setKbzpayAccount(kbzpay.value);
       if (wavepay) setWavepayAccount(wavepay.value);
+      // Payment method enable/disable (default to true if not set)
+      setKbzpayEnabled(kbzpayEn ? kbzpayEn.value === 'true' : true);
+      setWavepayEnabled(wavepayEn ? wavepayEn.value === 'true' : true);
     } catch (error) {
       console.error('Error fetching settings:', error);
     } finally {
@@ -888,62 +898,157 @@ export default function AdminSettings() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CreditCard className="h-5 w-5" />
-              MMK Payment Accounts
+              MMK Payment Settings
             </CardTitle>
             <CardDescription>
-              KBZPay နှင့် WavePay ငွေလက်ခံရန် Account Numbers များ
+              KBZPay နှင့် WavePay ငွေလက်ခံရန် Account Numbers နှင့် ဖွင့်/ပိတ် ဆက်တင်များ
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="kbzpayAccount">
-                  <span className="inline-flex items-center gap-2">
-                    📱 KBZPay Account
-                  </span>
-                </Label>
-                <Input
-                  id="kbzpayAccount"
-                  type="text"
-                  placeholder="09xxxxxxxxx (သို့မဟုတ်) Account Name - 09xxxxxxxxx"
-                  value={kbzpayAccount}
-                  onChange={(e) => setKbzpayAccount(e.target.value)}
-                />
-                <p className="text-sm text-muted-foreground">
-                  User များ MMK deposit တင်ရာတွင် ဤ account ကို ပြပေးပါမည်
-                </p>
-              </div>
+            <div className="space-y-6">
+              {/* Payment Method Enable/Disable Toggles */}
+              <div className="p-4 bg-muted/50 rounded-lg border space-y-4">
+                <div className="font-medium text-sm text-muted-foreground mb-2">
+                  💡 Payment Method ဖွင့်/ပိတ် (Deposit & Withdraw အတွက်)
+                </div>
+                
+                {/* KBZPay Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-full ${kbzpayEnabled ? 'bg-green-500/20' : 'bg-muted'}`}>
+                      <span className="text-lg">📱</span>
+                    </div>
+                    <div>
+                      <div className="font-medium">KBZPay</div>
+                      <div className="text-sm text-muted-foreground">
+                        {kbzpayEnabled ? 'User များ KBZPay သုံး၍ ငွေသွင်း/ထုတ် နိုင်သည်' : 'KBZPay ပိတ်ထားသည်'}
+                      </div>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={kbzpayEnabled}
+                    disabled={isTogglingPaymentMethod}
+                    onCheckedChange={async (checked) => {
+                      setIsTogglingPaymentMethod(true);
+                      try {
+                        const { error } = await supabase
+                          .from('settings')
+                          .upsert({ key: 'kbzpay_enabled', value: checked ? 'true' : 'false' }, { onConflict: 'key' });
+                        if (error) throw error;
+                        setKbzpayEnabled(checked);
+                        toast.success(checked ? 'KBZPay ဖွင့်ပြီး' : 'KBZPay ပိတ်ပြီး');
+                      } catch (error) {
+                        console.error('Error toggling KBZPay:', error);
+                        toast.error('ပြောင်းလဲမှု မအောင်မြင်ပါ');
+                      } finally {
+                        setIsTogglingPaymentMethod(false);
+                      }
+                    }}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="wavepayAccount">
-                  <span className="inline-flex items-center gap-2">
-                    📲 WavePay Account
-                  </span>
-                </Label>
-                <Input
-                  id="wavepayAccount"
-                  type="text"
-                  placeholder="09xxxxxxxxx (သို့မဟုတ်) Account Name - 09xxxxxxxxx"
-                  value={wavepayAccount}
-                  onChange={(e) => setWavepayAccount(e.target.value)}
-                />
-                <p className="text-sm text-muted-foreground">
-                  User များ MMK deposit တင်ရာတွင် ဤ account ကို ပြပေးပါမည်
-                </p>
-              </div>
+                {/* WavePay Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-full ${wavepayEnabled ? 'bg-green-500/20' : 'bg-muted'}`}>
+                      <span className="text-lg">📲</span>
+                    </div>
+                    <div>
+                      <div className="font-medium">WavePay</div>
+                      <div className="text-sm text-muted-foreground">
+                        {wavepayEnabled ? 'User များ WavePay သုံး၍ ငွေသွင်း/ထုတ် နိုင်သည်' : 'WavePay ပိတ်ထားသည်'}
+                      </div>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={wavepayEnabled}
+                    disabled={isTogglingPaymentMethod}
+                    onCheckedChange={async (checked) => {
+                      setIsTogglingPaymentMethod(true);
+                      try {
+                        const { error } = await supabase
+                          .from('settings')
+                          .upsert({ key: 'wavepay_enabled', value: checked ? 'true' : 'false' }, { onConflict: 'key' });
+                        if (error) throw error;
+                        setWavepayEnabled(checked);
+                        toast.success(checked ? 'WavePay ဖွင့်ပြီး' : 'WavePay ပိတ်ပြီး');
+                      } catch (error) {
+                        console.error('Error toggling WavePay:', error);
+                        toast.error('ပြောင်းလဲမှု မအောင်မြင်ပါ');
+                      } finally {
+                        setIsTogglingPaymentMethod(false);
+                      }
+                    }}
+                  />
+                </div>
 
-              <Button 
-                onClick={savePaymentAccounts} 
-                disabled={isSavingPaymentAccounts}
-                className="w-fit"
-              >
-                {isSavingPaymentAccounts ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="mr-2 h-4 w-4" />
+                {!kbzpayEnabled && !wavepayEnabled && (
+                  <Alert variant="destructive" className="mt-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      ⚠️ KBZPay နှင့် WavePay နှစ်ခုလုံး ပိတ်ထားပါသည်။ User များ MMK ငွေသွင်း/ထုတ် မလုပ်နိုင်ပါ။
+                    </AlertDescription>
+                  </Alert>
                 )}
-                Payment Accounts သိမ်းမည်
-              </Button>
+              </div>
+
+              {/* Payment Account Numbers */}
+              <div className="space-y-4">
+                <div className="font-medium text-sm text-muted-foreground">
+                  💳 Account Numbers (User များ ငွေလွှဲရန်)
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="kbzpayAccount">
+                    <span className="inline-flex items-center gap-2">
+                      📱 KBZPay Account
+                    </span>
+                  </Label>
+                  <Input
+                    id="kbzpayAccount"
+                    type="text"
+                    placeholder="09xxxxxxxxx (သို့မဟုတ်) Account Name - 09xxxxxxxxx"
+                    value={kbzpayAccount}
+                    onChange={(e) => setKbzpayAccount(e.target.value)}
+                    disabled={!kbzpayEnabled}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    User များ MMK deposit တင်ရာတွင် ဤ account ကို ပြပေးပါမည်
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="wavepayAccount">
+                    <span className="inline-flex items-center gap-2">
+                      📲 WavePay Account
+                    </span>
+                  </Label>
+                  <Input
+                    id="wavepayAccount"
+                    type="text"
+                    placeholder="09xxxxxxxxx (သို့မဟုတ်) Account Name - 09xxxxxxxxx"
+                    value={wavepayAccount}
+                    onChange={(e) => setWavepayAccount(e.target.value)}
+                    disabled={!wavepayEnabled}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    User များ MMK deposit တင်ရာတွင် ဤ account ကို ပြပေးပါမည်
+                  </p>
+                </div>
+
+                <Button 
+                  onClick={savePaymentAccounts} 
+                  disabled={isSavingPaymentAccounts}
+                  className="w-fit"
+                >
+                  {isSavingPaymentAccounts ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  Payment Accounts သိမ်းမည်
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
