@@ -581,7 +581,14 @@ export default function AdminDeposits() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <PaymentMethodBadge method={dep.payment_method} />
+                          <div className="flex items-center gap-1">
+                            <PaymentMethodBadge method={dep.payment_method} />
+                            {dep.screenshot_url && (
+                              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] px-1.5">
+                                📷
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <DepositStatusBadge status={dep.status} />
@@ -634,6 +641,41 @@ export default function AdminDeposits() {
           
           {selectedDeposit && (
             <div className="space-y-4">
+              {/* Screenshot Preview */}
+              {selectedDeposit.screenshot_url && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Payment Screenshot</label>
+                  <div className="relative rounded-lg border overflow-hidden bg-muted">
+                    <a 
+                      href={selectedDeposit.screenshot_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="block"
+                    >
+                      <img 
+                        src={selectedDeposit.screenshot_url} 
+                        alt="Payment Screenshot" 
+                        className="w-full h-auto max-h-64 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                      />
+                    </a>
+                    <a
+                      href={selectedDeposit.screenshot_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm rounded-full p-1.5 hover:bg-background transition-colors"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {!selectedDeposit.screenshot_url && (
+                <div className="rounded-lg border border-dashed p-4 text-center text-muted-foreground">
+                  <span className="text-sm">📷 Screenshot မတင်ရသေးပါ</span>
+                </div>
+              )}
+
               <div className="rounded-lg bg-muted p-4 space-y-2">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">ပမာဏ:</span>
