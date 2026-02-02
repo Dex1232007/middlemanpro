@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { Search, RefreshCw, Check, X, Loader2, Zap, Hand, Play, Download, Calendar, Filter, Copy } from 'lucide-react';
+import { Search, RefreshCw, Check, X, Loader2, Zap, Hand, Play, Download, Calendar, Filter, Copy, Phone, Wallet } from 'lucide-react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { WithdrawalStatusBadge } from '@/components/admin/StatusBadge';
 import { Button } from '@/components/ui/button';
@@ -45,6 +45,7 @@ import { toast as toastHook } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface WithdrawalWithProfile extends Omit<Withdrawal, 'profile'> {
   profile?: {
@@ -58,6 +59,7 @@ export default function AdminWithdrawals() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [currencyFilter, setCurrencyFilter] = useState<'all' | 'TON' | 'MMK'>('all');
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
   const [isExporting, setIsExporting] = useState(false);
@@ -251,20 +253,60 @@ export default function AdminWithdrawals() {
     const matchesSearch = wd.destination_wallet.toLowerCase().includes(searchTerm.toLowerCase()) ||
       username.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || wd.status === statusFilter;
+    const matchesCurrency = currencyFilter === 'all' || wd.currency === currencyFilter;
     
     const wdDate = new Date(wd.created_at);
     const matchesDateFrom = !dateFrom || wdDate >= dateFrom;
     const matchesDateTo = !dateTo || wdDate <= new Date(dateTo.getTime() + 24 * 60 * 60 * 1000 - 1);
     
-    return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
+    return matchesSearch && matchesStatus && matchesCurrency && matchesDateFrom && matchesDateTo;
   });
 
   const clearFilters = () => {
     setSearchTerm('');
     setStatusFilter('all');
+    setCurrencyFilter('all');
     setDateFrom(undefined);
     setDateTo(undefined);
   };
+
+  const getPaymentMethodDisplay = (wd: WithdrawalWithProfile) => {
+    if (wd.currency === 'MMK') {
+      return wd.payment_method || 'MMK';
+    }
+    return 'TON Wallet';
+  };
+
+  const formatAmount = (wd: WithdrawalWithProfile) => {
+    if (wd.currency === 'MMK') {
+      return `${Number(wd.amount_ton).toLocaleString()} MMK`;
+    }
+    return `${Number(wd.amount_ton).toFixed(4)} TON`;
+  };
+
+  const formatFee = (wd: WithdrawalWithProfile) => {
+    const amount = Number(wd.amount_ton);
+    const fee = amount * (commissionRate / 100);
+    if (wd.currency === 'MMK') {
+      return `${Math.round(fee).toLocaleString()} MMK`;
+    }
+    return `${fee.toFixed(4)} TON`;
+  };
+
+  const formatReceiveAmount = (wd: WithdrawalWithProfile) => {
+    const amount = Number(wd.amount_ton);
+    const receiveAmount = amount * (100 - commissionRate) / 100;
+    if (wd.currency === 'MMK') {
+      return `${Math.round(receiveAmount).toLocaleString()} MMK`;
+    }
+    return `${receiveAmount.toFixed(4)} TON`;
+  };
+
+  // Count by currency
+  const tonCount = withdrawals.filter(w => w.currency === 'TON').length;
+  const mmkCount = withdrawals.filter(w => w.currency === 'MMK').length;
+  const tonPendingCount = withdrawals.filter(w => w.currency === 'TON' && w.status === 'pending').length;
+  const mmkPendingCount = withdrawals.filter(w => w.currency === 'MMK' && w.status === 'pending').length;
 
   const exportToCSV = () => {
     if (filteredWithdrawals.length === 0) {
@@ -279,7 +321,7 @@ export default function AdminWithdrawals() {
     setIsExporting(true);
     
     try {
-      const headers = ['ရက်စွဲ', 'Username', 'ပမာဏ (TON)', `Commission (${commissionRate}%)`, 'ရရှိမည်', 'Wallet', 'Status', 'TX Hash'];
+      const headers = ['ရက်စွဲ', 'Username', 'Currency', 'Payment Method', 'ပမာဏ', `Commission (${commissionRate}%)`, 'ရရှိမည်', 'Destination', 'Status', 'TX Hash/Reference'];
       
       const csvRows = [
         headers.join(','),
@@ -288,12 +330,17 @@ export default function AdminWithdrawals() {
           const fee = amount * (commissionRate / 100);
           const receiveAmount = amount - fee;
           const username = wd.profile?.telegram_username ? `@${wd.profile.telegram_username}` : '-';
+          const amountStr = wd.currency === 'MMK' ? Math.round(amount).toLocaleString() : amount.toFixed(4);
+          const feeStr = wd.currency === 'MMK' ? Math.round(fee).toLocaleString() : fee.toFixed(4);
+          const receiveStr = wd.currency === 'MMK' ? Math.round(receiveAmount).toLocaleString() : receiveAmount.toFixed(4);
           return [
             format(new Date(wd.created_at), 'yyyy-MM-dd HH:mm'),
             username,
-            amount.toFixed(4),
-            fee.toFixed(4),
-            receiveAmount.toFixed(4),
+            wd.currency,
+            getPaymentMethodDisplay(wd),
+            `${amountStr} ${wd.currency}`,
+            `${feeStr} ${wd.currency}`,
+            `${receiveStr} ${wd.currency}`,
             wd.destination_wallet,
             wd.status,
             wd.ton_tx_hash || '-',
@@ -307,7 +354,7 @@ export default function AdminWithdrawals() {
       
       const link = document.createElement('a');
       link.href = url;
-      link.download = `withdrawals_${format(new Date(), 'yyyy-MM-dd_HHmm')}.csv`;
+      link.download = `withdrawals_${currencyFilter !== 'all' ? currencyFilter + '_' : ''}${format(new Date(), 'yyyy-MM-dd_HHmm')}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -359,46 +406,72 @@ export default function AdminWithdrawals() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+        <CardHeader className="flex flex-col space-y-4 pb-4">
+          {/* Currency Tabs */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <Tabs value={currencyFilter} onValueChange={(v) => setCurrencyFilter(v as 'all' | 'TON' | 'MMK')} className="w-full sm:w-auto">
+              <TabsList className="grid w-full grid-cols-3 sm:w-[300px]">
+                <TabsTrigger value="all" className="flex items-center gap-2">
+                  အားလုံး
+                  {pendingCount > 0 && (
+                    <Badge variant="destructive" className="h-5 px-1.5 text-xs">{pendingCount}</Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="TON" className="flex items-center gap-2">
+                  <Wallet className="h-3.5 w-3.5" />
+                  TON
+                  {tonPendingCount > 0 && (
+                    <Badge variant="destructive" className="h-5 px-1.5 text-xs">{tonPendingCount}</Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="MMK" className="flex items-center gap-2">
+                  <Phone className="h-3.5 w-3.5" />
+                  MMK
+                  {mmkPendingCount > 0 && (
+                    <Badge variant="destructive" className="h-5 px-1.5 text-xs">{mmkPendingCount}</Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={exportToCSV}
+                disabled={isExporting || filteredWithdrawals.length === 0}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                {isExporting ? 'Exporting...' : 'CSV Export'}
+              </Button>
+              {withdrawalMode === 'auto' && tonPendingCount > 0 && currencyFilter !== 'MMK' && (
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  onClick={handleAutoProcess}
+                  disabled={isAutoProcessing}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {isAutoProcessing ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Play className="mr-2 h-4 w-4" />
+                  )}
+                  Auto Process TON
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={fetchWithdrawals}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                ပြန်လည်ရယူ
+              </Button>
+            </div>
+          </div>
+
           <div className="flex items-center gap-3">
             <CardTitle className="text-lg">ငွေထုတ်ယူမှု စာရင်း</CardTitle>
             <span className="text-sm text-muted-foreground">
               ({filteredWithdrawals.length} ခု)
             </span>
-            {pendingCount > 0 && (
-              <Badge variant="destructive">{pendingCount} pending</Badge>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={exportToCSV}
-              disabled={isExporting || filteredWithdrawals.length === 0}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              {isExporting ? 'Exporting...' : 'CSV Export'}
-            </Button>
-            {withdrawalMode === 'auto' && pendingCount > 0 && (
-              <Button 
-                variant="default" 
-                size="sm" 
-                onClick={handleAutoProcess}
-                disabled={isAutoProcessing}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                {isAutoProcessing ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Play className="mr-2 h-4 w-4" />
-                )}
-                Process All
-              </Button>
-            )}
-            <Button variant="outline" size="sm" onClick={fetchWithdrawals}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              ပြန်လည်ရယူ
-            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -409,7 +482,7 @@ export default function AdminWithdrawals() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Wallet သို့မဟုတ် Username ဖြင့် ရှာပါ..."
+                  placeholder={currencyFilter === 'MMK' ? "Phone သို့မဟုတ် Username ဖြင့် ရှာပါ..." : "Wallet သို့မဟုတ် Username ဖြင့် ရှာပါ..."}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -486,7 +559,7 @@ export default function AdminWithdrawals() {
                 </PopoverContent>
               </Popover>
 
-              {(searchTerm || statusFilter !== 'all' || dateFrom || dateTo) && (
+              {(searchTerm || statusFilter !== 'all' || currencyFilter !== 'all' || dateFrom || dateTo) && (
                 <Button 
                   variant="ghost" 
                   size="sm" 
@@ -513,10 +586,12 @@ export default function AdminWithdrawals() {
                   <TableRow>
                     <TableHead>ရက်စွဲ</TableHead>
                     <TableHead>Username</TableHead>
+                    {currencyFilter === 'all' && <TableHead>Currency</TableHead>}
+                    <TableHead>Payment</TableHead>
                     <TableHead>ပမာဏ</TableHead>
                     <TableHead>Commission ({commissionRate}%)</TableHead>
                     <TableHead>ရရှိမည်</TableHead>
-                    <TableHead>Wallet</TableHead>
+                    <TableHead>{currencyFilter === 'MMK' ? 'Phone Number' : 'Destination'}</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">လုပ်ဆောင်မှု</TableHead>
                   </TableRow>
@@ -524,16 +599,14 @@ export default function AdminWithdrawals() {
                 <TableBody>
                   {filteredWithdrawals.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="h-24 text-center">
+                      <TableCell colSpan={currencyFilter === 'all' ? 10 : 9} className="h-24 text-center">
                         ငွေထုတ်ယူမှု မရှိပါ
                       </TableCell>
                     </TableRow>
                   ) : (
                     filteredWithdrawals.map((wd) => {
-                      const amount = Number(wd.amount_ton);
-                      const fee = amount * (commissionRate / 100);
-                      const receiveAmount = amount - fee;
                       const username = wd.profile?.telegram_username;
+                      const isMMK = wd.currency === 'MMK';
 
                       return (
                         <TableRow key={wd.id}>
@@ -547,27 +620,47 @@ export default function AdminWithdrawals() {
                               <span className="text-muted-foreground">-</span>
                             )}
                           </TableCell>
+                          {currencyFilter === 'all' && (
+                            <TableCell>
+                              <Badge variant={isMMK ? 'secondary' : 'default'} className="flex items-center gap-1 w-fit">
+                                {isMMK ? <Phone className="h-3 w-3" /> : <Wallet className="h-3 w-3" />}
+                                {wd.currency}
+                              </Badge>
+                            </TableCell>
+                          )}
+                          <TableCell>
+                            <span className="text-sm text-muted-foreground">
+                              {getPaymentMethodDisplay(wd)}
+                            </span>
+                          </TableCell>
                           <TableCell className="font-mono font-semibold">
-                            {amount.toFixed(4)} TON
+                            {formatAmount(wd)}
                           </TableCell>
                           <TableCell className="font-mono text-destructive">
-                            -{fee.toFixed(4)} TON
+                            -{formatFee(wd)}
                           </TableCell>
                           <TableCell className="font-mono text-success font-semibold">
-                            {receiveAmount.toFixed(4)} TON
+                            {formatReceiveAmount(wd)}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
-                              <code className="rounded bg-muted px-2 py-1 text-xs">
-                                {wd.destination_wallet.slice(0, 8)}...{wd.destination_wallet.slice(-6)}
-                              </code>
+                              {isMMK ? (
+                                <code className="rounded bg-muted px-2 py-1 text-xs flex items-center gap-1">
+                                  <Phone className="h-3 w-3" />
+                                  {wd.destination_wallet}
+                                </code>
+                              ) : (
+                                <code className="rounded bg-muted px-2 py-1 text-xs">
+                                  {wd.destination_wallet.slice(0, 8)}...{wd.destination_wallet.slice(-6)}
+                                </code>
+                              )}
                               <Button
                                 size="icon"
                                 variant="ghost"
                                 className="h-6 w-6"
                                 onClick={() => {
                                   navigator.clipboard.writeText(wd.destination_wallet);
-                                  toast.success('Wallet address copied!');
+                                  toast.success(isMMK ? 'Phone number copied!' : 'Wallet address copied!');
                                 }}
                               >
                                 <Copy className="h-3 w-3" />
@@ -622,22 +715,33 @@ export default function AdminWithdrawals() {
             <DialogDescription asChild>
               {selectedWithdrawal && (
                 <div className="space-y-2 mt-2">
+                  {/* Currency Badge */}
+                  <div className="flex justify-center">
+                    <Badge variant={selectedWithdrawal.currency === 'MMK' ? 'secondary' : 'default'} className="flex items-center gap-1">
+                      {selectedWithdrawal.currency === 'MMK' ? <Phone className="h-3 w-3" /> : <Wallet className="h-3 w-3" />}
+                      {selectedWithdrawal.currency} Withdrawal
+                      {selectedWithdrawal.currency === 'MMK' && selectedWithdrawal.payment_method && (
+                        <span className="ml-1">({selectedWithdrawal.payment_method})</span>
+                      )}
+                    </Badge>
+                  </div>
+
                   <div className="p-3 bg-muted rounded-lg space-y-1">
                     <div className="flex justify-between">
                       <span>ထုတ်ယူပမာဏ:</span>
-                      <strong>{Number(selectedWithdrawal.amount_ton).toFixed(4)} TON</strong>
+                      <strong>{formatAmount(selectedWithdrawal)}</strong>
                     </div>
                     <div className="flex justify-between text-destructive">
                       <span>Commission ({commissionRate}%):</span>
-                      <strong>-{(Number(selectedWithdrawal.amount_ton) * commissionRate / 100).toFixed(4)} TON</strong>
+                      <strong>-{formatFee(selectedWithdrawal)}</strong>
                     </div>
                     <div className="flex justify-between text-success border-t pt-1">
                       <span>ရရှိမည်:</span>
-                      <strong>{(Number(selectedWithdrawal.amount_ton) * (100 - commissionRate) / 100).toFixed(4)} TON</strong>
+                      <strong>{formatReceiveAmount(selectedWithdrawal)}</strong>
                     </div>
-                    </div>
+                  </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>Wallet:</span>
+                    <span>{selectedWithdrawal.currency === 'MMK' ? 'Phone:' : 'Wallet:'}</span>
                     <code className="flex-1 truncate">{selectedWithdrawal.destination_wallet}</code>
                     <Button
                       size="icon"
@@ -645,7 +749,7 @@ export default function AdminWithdrawals() {
                       className="h-6 w-6 shrink-0"
                       onClick={() => {
                         navigator.clipboard.writeText(selectedWithdrawal.destination_wallet);
-                        toast.success('Wallet address copied!');
+                        toast.success(selectedWithdrawal.currency === 'MMK' ? 'Phone number copied!' : 'Wallet address copied!');
                       }}
                     >
                       <Copy className="h-3 w-3" />
@@ -659,10 +763,12 @@ export default function AdminWithdrawals() {
           <div className="space-y-4">
             {dialogAction === 'approve' && (
               <div className="space-y-2">
-                <Label htmlFor="txHash">TX Hash (optional)</Label>
+                <Label htmlFor="txHash">
+                  {selectedWithdrawal?.currency === 'MMK' ? 'Transaction Reference (optional)' : 'TX Hash (optional)'}
+                </Label>
                 <Input
                   id="txHash"
-                  placeholder="TON transaction hash"
+                  placeholder={selectedWithdrawal?.currency === 'MMK' ? 'Payment reference number' : 'TON transaction hash'}
                   value={txHash}
                   onChange={(e) => setTxHash(e.target.value)}
                 />
