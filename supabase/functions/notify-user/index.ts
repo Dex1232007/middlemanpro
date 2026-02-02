@@ -33,7 +33,7 @@ async function sendTelegramMessage(chatId: number, text: string, parseMode = 'Ma
 }
 
 interface NotifyRequest {
-  type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx' | 'admin_new_deposit' | 'admin_transaction_completed' | 'mmk_deposit_approved' | 'mmk_deposit_rejected' | 'admin_new_mmk_withdrawal' | 'mmk_withdrawal_approved' | 'mmk_withdrawal_rejected'
+  type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx' | 'admin_new_deposit' | 'admin_transaction_completed' | 'mmk_deposit_approved' | 'mmk_deposit_rejected' | 'admin_new_mmk_withdrawal' | 'mmk_withdrawal_approved' | 'mmk_withdrawal_rejected' | 'admin_new_mmk_deposit'
   profile_id?: string
   telegram_id?: number
   amount?: number
@@ -54,6 +54,10 @@ interface NotifyRequest {
   currency?: string
   payment_method?: string
   new_balance?: number
+  // MMK specific fields
+  account_name?: string
+  withdrawal_id?: string
+  deposit_id?: string
 }
 
 async function verifyAdminAuth(req: Request): Promise<{ authorized: boolean; error?: string }> {
@@ -122,7 +126,7 @@ Deno.serve(async (req) => {
     let telegramId = body.telegram_id
 
     // For admin notifications, get admin telegram ID from settings
-    if (body.type === 'admin_new_dispute' || body.type === 'admin_new_withdrawal' || body.type === 'admin_high_value_tx' || body.type === 'admin_new_deposit' || body.type === 'admin_transaction_completed' || body.type === 'admin_new_mmk_withdrawal') {
+    if (body.type === 'admin_new_dispute' || body.type === 'admin_new_withdrawal' || body.type === 'admin_high_value_tx' || body.type === 'admin_new_deposit' || body.type === 'admin_transaction_completed' || body.type === 'admin_new_mmk_withdrawal' || body.type === 'admin_new_mmk_deposit') {
       const { data: adminSetting } = await adminSupabase
         .from('settings')
         .select('value')
@@ -363,11 +367,69 @@ ${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${bod
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 💵 *ပမာဏ:* ${Number(body.amount).toLocaleString()} MMK
 ${mmkMethodIcon} *Payment:* ${mmkMethodName}
+👤 *Account:* ${body.account_name || 'N/A'}
 📱 *Phone:* \`${body.destination_wallet}\`
 👤 *အသုံးပြုသူ:* ${body.user_telegram_username ? `@${body.user_telegram_username}` : 'Unknown'}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-⏳ Admin Dashboard မှ အတည်ပြုရန် စောင့်နေသည်`
+📋 *ဖြေရှင်းရန် အောက်မှ ရွေးချယ်ပါ:*`
+        
+        // Send with approve/reject buttons for MMK withdrawal
+        if (body.withdrawal_id) {
+          const mmkWdBtns = {
+            inline_keyboard: [
+              [
+                { text: '✅ အတည်ပြု', callback_data: `adm:mwdap:${body.withdrawal_id}` },
+                { text: '❌ ငြင်းပယ်', callback_data: `adm:mwdrej:${body.withdrawal_id}` }
+              ]
+            ]
+          }
+          await sendTelegramMessage(telegramId, message, 'Markdown', mmkWdBtns)
+          
+          return new Response(
+            JSON.stringify({ success: true }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        break
+
+      case 'admin_new_mmk_deposit':
+        const depMethodName = body.payment_method === 'KBZPAY' ? 'KBZPay' : body.payment_method === 'WAVEPAY' ? 'WavePay' : 'MMK'
+        const depMethodIcon = body.payment_method === 'KBZPAY' ? '📱' : '📲'
+        message = `💰 *MMK ငွေသွင်းမှု အသစ်!*
+
+╔══════════════════════════════╗
+║                              ║
+║   ${depMethodIcon} *NEW MMK DEPOSIT*      ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${Number(body.amount).toLocaleString()} MMK
+${depMethodIcon} *Payment:* ${depMethodName}
+🔑 *Code:* \`${body.unique_code || 'N/A'}\`
+👤 *အသုံးပြုသူ:* ${body.user_telegram_username ? `@${body.user_telegram_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 *ဖြေရှင်းရန် အောက်မှ ရွေးချယ်ပါ:*`
+        
+        // Send with approve/reject buttons for MMK deposit
+        if (body.deposit_id) {
+          const mmkDepBtns = {
+            inline_keyboard: [
+              [
+                { text: '✅ အတည်ပြု', callback_data: `adm:mdepap:${body.deposit_id}` },
+                { text: '❌ ငြင်းပယ်', callback_data: `adm:mdeprej:${body.deposit_id}` }
+              ]
+            ]
+          }
+          await sendTelegramMessage(telegramId, message, 'Markdown', mmkDepBtns)
+          
+          return new Response(
+            JSON.stringify({ success: true }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
         break
 
       case 'mmk_withdrawal_approved':

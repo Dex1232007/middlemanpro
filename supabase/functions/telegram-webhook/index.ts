@@ -1338,15 +1338,42 @@ ${lang === 'en' ? 'Please try again' : 'ထပ်မံကြိုးစား�
     
     const screenshotUrl = urlData.publicUrl
     
-    // Update deposit with screenshot URL
-    await supabase
+    // Update deposit with screenshot URL and get deposit ID
+    const { data: depositRecord } = await supabase
       .from('deposits')
       .update({ screenshot_url: screenshotUrl })
       .eq('unique_code', stateData.uniqueCode)
       .eq('profile_id', profile.id)
+      .select('id')
+      .single()
     
     // Clear user state
     await deleteUserState(chatId)
+    
+    // Notify admin about new MMK deposit with inline approve/reject buttons
+    if (depositRecord?.id) {
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/notify-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+          },
+          body: JSON.stringify({
+            type: 'admin_new_mmk_deposit',
+            amount: stateData.amount,
+            user_telegram_username: profile.telegram_username,
+            unique_code: stateData.uniqueCode,
+            payment_method: stateData.paymentMethod,
+            currency: 'MMK',
+            deposit_id: depositRecord.id
+          })
+        })
+        console.log('Admin notified about new MMK deposit')
+      } catch (e) {
+        console.error('Failed to notify admin about MMK deposit:', e)
+      }
+    }
     
     // Send success message
     const successText = `✅ *${lang === 'en' ? 'Screenshot Uploaded!' : 'Screenshot တင်ပြီးပါပြီ!'}*
@@ -1377,8 +1404,8 @@ ${lang === 'en' ? 'Please try again' : 'ထပ်မံကြိုးစား�
   }
 }
 
-// Show MMK withdraw phone prompt
-async function showWithdrawMMKPhonePrompt(chatId: number, msgId: number, amount: number, paymentMethod: string, username?: string) {
+// Show MMK withdraw account name prompt (step 1)
+async function showWithdrawMMKAccountNamePrompt(chatId: number, msgId: number, amount: number, paymentMethod: string, username?: string) {
   const profile = await getProfile(chatId, username)
   const lang = (profile.language || 'my') as Language
   
@@ -1390,7 +1417,50 @@ async function showWithdrawMMKPhonePrompt(chatId: number, msgId: number, amount:
   const methodName = paymentMethod === 'KBZPAY' ? 'KBZPay' : 'WavePay'
   const methodIcon = paymentMethod === 'KBZPAY' ? '📱' : '📲'
   
-  await setUserState(chatId, { action: 'wm_phone', msgId, data: { amount, fee, receiveAmount, currency: 'MMK', paymentMethod } })
+  await setUserState(chatId, { action: 'wm_account_name', msgId, data: { amount, fee, receiveAmount, currency: 'MMK', paymentMethod } })
+  
+  const text = `${methodIcon} *${methodName} ${lang === 'en' ? 'Withdrawal' : 'ငွေထုတ်ရန်'}*
+
+╔══════════════════════════════╗
+║                              ║
+║   👤 *ENTER ACCOUNT NAME*    ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *${lang === 'en' ? 'Amount' : 'ထုတ်ယူမည်'}:* ${amount.toLocaleString()} MMK
+📊 *Commission (${commRate}%):* -${fee.toLocaleString()} MMK
+✅ *${lang === 'en' ? 'You receive' : 'လက်ခံရရှိမည်'}:* ${receiveAmount.toLocaleString()} MMK
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 *${lang === 'en' ? 'Step 1/2: Enter account name' : 'အဆင့် ၁/၂: အကောင့်နာမည် ထည့်ပါ'}:*
+
+${lang === 'en' ? 'Example' : 'ဥပမာ'}: \`Mg Mg\` ${lang === 'en' ? 'or' : 'သို့'} \`မောင်မောင်\`
+
+⚠️ *${lang === 'en' ? 'Enter the name registered on your account' : 'အကောင့်တွင် မှတ်ပုံတင်ထားသော နာမည် ထည့်ပါ'}*`
+  
+  const edited = await editText(chatId, msgId, text, cancelBtn(lang))
+  if (!edited) {
+    await deleteMsg(chatId, msgId)
+    const newMsg = await sendMessage(chatId, text, cancelBtn(lang))
+    if (newMsg) await setUserState(chatId, { action: 'wm_account_name', msgId: newMsg, data: { amount, fee, receiveAmount, currency: 'MMK', paymentMethod } })
+  }
+}
+
+// Show MMK withdraw phone prompt (step 2)
+async function showWithdrawMMKPhonePrompt(chatId: number, msgId: number, amount: number, paymentMethod: string, accountName: string, username?: string) {
+  const profile = await getProfile(chatId, username)
+  const lang = (profile.language || 'my') as Language
+  
+  const { data: commSetting } = await supabase.from('settings').select('value').eq('key', 'commission_rate').maybeSingle()
+  const commRate = commSetting ? parseFloat(commSetting.value) : 5
+  const fee = Math.round(amount * commRate / 100)
+  const receiveAmount = amount - fee
+  
+  const methodName = paymentMethod === 'KBZPAY' ? 'KBZPay' : 'WavePay'
+  const methodIcon = paymentMethod === 'KBZPAY' ? '📱' : '📲'
+  
+  await setUserState(chatId, { action: 'wm_phone', msgId, data: { amount, fee, receiveAmount, currency: 'MMK', paymentMethod, accountName } })
   
   const text = `${methodIcon} *${methodName} ${lang === 'en' ? 'Withdrawal' : 'ငွေထုတ်ရန်'}*
 
@@ -1404,9 +1474,10 @@ async function showWithdrawMMKPhonePrompt(chatId: number, msgId: number, amount:
 💵 *${lang === 'en' ? 'Amount' : 'ထုတ်ယူမည်'}:* ${amount.toLocaleString()} MMK
 📊 *Commission (${commRate}%):* -${fee.toLocaleString()} MMK
 ✅ *${lang === 'en' ? 'You receive' : 'လက်ခံရရှိမည်'}:* ${receiveAmount.toLocaleString()} MMK
+👤 *${lang === 'en' ? 'Account' : 'အကောင့်'}:* ${accountName}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📱 *${lang === 'en' ? 'Enter phone number' : 'ဖုန်းနံပါတ် ထည့်ပါ'}:*
+📱 *${lang === 'en' ? 'Step 2/2: Enter phone number' : 'အဆင့် ၂/၂: ဖုန်းနံပါတ် ထည့်ပါ'}:*
 
 ${lang === 'en' ? 'Example' : 'ဥပမာ'}: \`09xxxxxxxxx\`
 
@@ -1416,7 +1487,7 @@ ${lang === 'en' ? 'Example' : 'ဥပမာ'}: \`09xxxxxxxxx\`
   if (!edited) {
     await deleteMsg(chatId, msgId)
     const newMsg = await sendMessage(chatId, text, cancelBtn(lang))
-    if (newMsg) await setUserState(chatId, { action: 'wm_phone', msgId: newMsg, data: { amount, fee, receiveAmount, currency: 'MMK', paymentMethod } })
+    if (newMsg) await setUserState(chatId, { action: 'wm_phone', msgId: newMsg, data: { amount, fee, receiveAmount, currency: 'MMK', paymentMethod, accountName } })
   }
 }
 
@@ -2154,7 +2225,7 @@ Admin ထံ ဆက်သွယ်ပါ။`, backBtn())
   await deleteUserState(chatId)
 }
 
-// Handle MMK withdrawal request with phone number
+// Handle MMK withdrawal request with phone number and account name
 async function handleMMKWithdrawRequest(chatId: number, phone: string, msgId: number, username?: string) {
   const state = await getUserState(chatId)
   const profile = await getProfile(chatId, username)
@@ -2165,13 +2236,14 @@ async function handleMMKWithdrawRequest(chatId: number, phone: string, msgId: nu
   const fee = Number(state?.data?.fee) || 0
   const receiveAmount = Number(state?.data?.receiveAmount) || (amount - fee)
   const paymentMethod = state?.data?.paymentMethod || 'KBZPAY'
+  const accountName = state?.data?.accountName || ''
   const { data: commSetting } = await supabase.from('settings').select('value').eq('key', 'commission_rate').maybeSingle()
   const commRate = commSetting ? parseFloat(commSetting.value) : 5
   
-  console.log(`[MMK WD Request] Amount: ${amount}, Fee: ${fee}, Receive: ${receiveAmount}, Method: ${paymentMethod}`)
+  console.log(`[MMK WD Request] Amount: ${amount}, Fee: ${fee}, Receive: ${receiveAmount}, Method: ${paymentMethod}, Account: ${accountName}`)
   
-  if (!amount || amount <= 0 || !phone) {
-    await editText(chatId, msgId, '❌ ပမာဏ သို့မဟုတ် ဖုန်းနံပါတ် မှားနေပါသည်', backBtn(lang))
+  if (!amount || amount <= 0 || !phone || !accountName) {
+    await editText(chatId, msgId, '❌ ပမာဏ၊ ဖုန်းနံပါတ် သို့မဟုတ် အကောင့်နာမည် မှားနေပါသည်', backBtn(lang))
     await deleteUserState(chatId)
     return
   }
@@ -2228,12 +2300,13 @@ ${methodIcon} *Payment:* ${methodName}
 💵 *${lang === 'en' ? 'Amount' : 'ထုတ်ယူမည်'}:* ${amount.toLocaleString()} MMK
 📊 *Commission (${commRate}%):* -${fee.toLocaleString()} MMK
 ✅ *${lang === 'en' ? 'You receive' : 'ရရှိမည်'}:* ${receiveAmount.toLocaleString()} MMK
+👤 *${lang === 'en' ? 'Account' : 'အကောင့်'}:* ${accountName}
 📱 *${lang === 'en' ? 'Phone' : 'ဖုန်း'}:* \`${cleanPhone}\`
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏳ *Status:* ${lang === 'en' ? 'Processing...' : 'စောင့်ဆိုင်းနေသည်...'}`)
 
-  // Create withdrawal record with currency=MMK
+  // Create withdrawal record with currency=MMK (include account name in admin_notes)
   const { data: newWithdrawal, error } = await supabase.from('withdrawals').insert({
     profile_id: profile.id,
     amount_ton: amount, // Using amount_ton field for MMK amount too
@@ -2241,7 +2314,7 @@ ${methodIcon} *Payment:* ${methodName}
     status: 'pending',
     currency: 'MMK',
     payment_method: paymentMethod,
-    admin_notes: `${methodName} | Fee: ${fee.toLocaleString()} MMK (${commRate}%), Receive: ${receiveAmount.toLocaleString()} MMK`,
+    admin_notes: `Account: ${accountName} | ${methodName} | Fee: ${fee.toLocaleString()} MMK (${commRate}%), Receive: ${receiveAmount.toLocaleString()} MMK`,
     telegram_msg_id: statusMsgId,
   }).select().single()
 
@@ -2254,7 +2327,7 @@ ${methodIcon} *Payment:* ${methodName}
     return
   }
 
-  // Notify admin about new MMK withdrawal
+  // Notify admin about new MMK withdrawal with inline approve/reject buttons
   try {
     await fetch(`${SUPABASE_URL}/functions/v1/notify-user`, {
       method: 'POST',
@@ -2268,7 +2341,9 @@ ${methodIcon} *Payment:* ${methodName}
         user_telegram_username: profile.telegram_username,
         destination_wallet: cleanPhone,
         payment_method: paymentMethod,
-        currency: 'MMK'
+        currency: 'MMK',
+        account_name: accountName,
+        withdrawal_id: newWithdrawal.id
       })
     })
     console.log('Admin notified about new MMK withdrawal')
@@ -2293,6 +2368,7 @@ ${methodIcon} *Payment:* ${methodName}
 💵 *${lang === 'en' ? 'Amount' : 'ထုတ်ယူမည်'}:* ${amount.toLocaleString()} MMK
 📊 *Commission (${commRate}%):* -${fee.toLocaleString()} MMK
 ✅ *${lang === 'en' ? 'You receive' : 'ရရှိမည်'}:* ${receiveAmount.toLocaleString()} MMK
+👤 *${lang === 'en' ? 'Account' : 'အကောင့်'}:* ${accountName}
 📱 *${lang === 'en' ? 'Phone' : 'ဖုန်း'}:* \`${cleanPhone}\`
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -3159,6 +3235,291 @@ async function handleAdminDisputeResolve(chatId: number, msgId: number, txLink: 
   }
 }
 
+// ==================== ADMIN MMK WITHDRAWAL RESOLUTION ====================
+async function handleAdminMMKWithdrawalResolve(chatId: number, msgId: number, withdrawalId: string, resolution: 'approved' | 'rejected', cbId: string, telegramId: number) {
+  // Verify this user is an admin by checking admin_telegram_id setting
+  const { data: adminSetting } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'admin_telegram_id')
+    .maybeSingle()
+  
+  const adminTelegramId = adminSetting?.value ? parseInt(adminSetting.value) : null
+  
+  if (!adminTelegramId || telegramId !== adminTelegramId) {
+    await answerCb(cbId, '❌ Admin သာ ဖြေရှင်းနိုင်ပါသည်', true)
+    return
+  }
+
+  // Find the withdrawal
+  const { data: withdrawal } = await supabase
+    .from('withdrawals')
+    .select('*, profile:profiles!withdrawals_profile_id_fkey(*)')
+    .eq('id', withdrawalId)
+    .single()
+
+  if (!withdrawal) {
+    await answerCb(cbId, '❌ ငွေထုတ်ယူမှု ရှာမတွေ့ပါ', true)
+    return
+  }
+
+  if (withdrawal.status !== 'pending') {
+    await answerCb(cbId, '❌ ငွေထုတ်ယူမှု pending status မဟုတ်တော့ပါ', true)
+    return
+  }
+
+  const methodName = withdrawal.payment_method === 'KBZPAY' ? 'KBZPay' : 'WavePay'
+  const methodIcon = withdrawal.payment_method === 'KBZPAY' ? '📱' : '📲'
+  const amount = Number(withdrawal.amount_ton)
+
+  if (resolution === 'approved') {
+    // Deduct balance and approve withdrawal
+    const currentBalance = Number(withdrawal.profile?.balance_mmk) || 0
+    const newBalance = currentBalance - amount
+
+    await supabase.from('profiles').update({ balance_mmk: newBalance }).eq('id', withdrawal.profile_id)
+    await supabase.from('withdrawals').update({ 
+      status: 'approved', 
+      processed_at: new Date().toISOString() 
+    }).eq('id', withdrawalId)
+
+    // Notify user
+    if (withdrawal.profile?.telegram_id) {
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/notify-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+          },
+          body: JSON.stringify({
+            type: 'mmk_withdrawal_approved',
+            telegram_id: withdrawal.profile.telegram_id,
+            amount: amount,
+            destination_wallet: withdrawal.destination_wallet,
+            payment_method: withdrawal.payment_method,
+            new_balance: newBalance
+          })
+        })
+      } catch (e) {
+        console.error('Failed to notify user about MMK withdrawal approval:', e)
+      }
+    }
+
+    await answerCb(cbId, '✅ အတည်ပြုပြီး!')
+    
+    await editText(chatId, msgId, `✅ *MMK ငွေထုတ်ယူမှု အတည်ပြုပြီး!*
+
+╔══════════════════════════════╗
+║                              ║
+║   ${methodIcon} *WITHDRAWAL APPROVED*  ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${amount.toLocaleString()} MMK
+${methodIcon} *Payment:* ${methodName}
+📱 *Phone:* \`${withdrawal.destination_wallet}\`
+👤 *User:* ${withdrawal.profile?.telegram_username ? `@${withdrawal.profile.telegram_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ User ထံ အကြောင်းကြားပြီးပါပြီ`)
+
+  } else {
+    // Reject withdrawal (don't deduct balance)
+    await supabase.from('withdrawals').update({ 
+      status: 'rejected', 
+      processed_at: new Date().toISOString(),
+      admin_notes: (withdrawal.admin_notes || '') + ' | Rejected by admin'
+    }).eq('id', withdrawalId)
+
+    // Notify user
+    if (withdrawal.profile?.telegram_id) {
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/notify-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+          },
+          body: JSON.stringify({
+            type: 'mmk_withdrawal_rejected',
+            telegram_id: withdrawal.profile.telegram_id,
+            amount: amount,
+            destination_wallet: withdrawal.destination_wallet,
+            payment_method: withdrawal.payment_method,
+            new_balance: Number(withdrawal.profile.balance_mmk) || 0
+          })
+        })
+      } catch (e) {
+        console.error('Failed to notify user about MMK withdrawal rejection:', e)
+      }
+    }
+
+    await answerCb(cbId, '❌ ငြင်းပယ်ပြီး!')
+    
+    await editText(chatId, msgId, `❌ *MMK ငွေထုတ်ယူမှု ငြင်းပယ်ပြီး*
+
+╔══════════════════════════════╗
+║                              ║
+║   ${methodIcon} *WITHDRAWAL REJECTED*  ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${amount.toLocaleString()} MMK
+${methodIcon} *Payment:* ${methodName}
+📱 *Phone:* \`${withdrawal.destination_wallet}\`
+👤 *User:* ${withdrawal.profile?.telegram_username ? `@${withdrawal.profile.telegram_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ User ထံ အကြောင်းကြားပြီးပါပြီ`)
+  }
+}
+
+// ==================== ADMIN MMK DEPOSIT RESOLUTION ====================
+async function handleAdminMMKDepositResolve(chatId: number, msgId: number, depositId: string, resolution: 'approved' | 'rejected', cbId: string, telegramId: number) {
+  // Verify this user is an admin by checking admin_telegram_id setting
+  const { data: adminSetting } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'admin_telegram_id')
+    .maybeSingle()
+  
+  const adminTelegramId = adminSetting?.value ? parseInt(adminSetting.value) : null
+  
+  if (!adminTelegramId || telegramId !== adminTelegramId) {
+    await answerCb(cbId, '❌ Admin သာ ဖြေရှင်းနိုင်ပါသည်', true)
+    return
+  }
+
+  // Find the deposit
+  const { data: deposit } = await supabase
+    .from('deposits')
+    .select('*, profile:profiles!deposits_profile_id_fkey(*)')
+    .eq('id', depositId)
+    .single()
+
+  if (!deposit) {
+    await answerCb(cbId, '❌ ငွေသွင်းမှု ရှာမတွေ့ပါ', true)
+    return
+  }
+
+  if (deposit.status !== 'pending') {
+    await answerCb(cbId, '❌ ငွေသွင်းမှု pending status မဟုတ်တော့ပါ', true)
+    return
+  }
+
+  const methodName = deposit.payment_method === 'KBZPAY' ? 'KBZPay' : 'WavePay'
+  const methodIcon = deposit.payment_method === 'KBZPAY' ? '📱' : '📲'
+  const amount = Number(deposit.amount_ton)
+
+  if (resolution === 'approved') {
+    // Credit balance and approve deposit
+    const currentBalance = Number(deposit.profile?.balance_mmk) || 0
+    const newBalance = currentBalance + amount
+
+    await supabase.from('profiles').update({ balance_mmk: newBalance }).eq('id', deposit.profile_id)
+    await supabase.from('deposits').update({ 
+      status: 'confirmed',
+      is_confirmed: true,
+      confirmed_at: new Date().toISOString(),
+      admin_approved_at: new Date().toISOString()
+    }).eq('id', depositId)
+
+    // Notify user
+    if (deposit.profile?.telegram_id) {
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/notify-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+          },
+          body: JSON.stringify({
+            type: 'mmk_deposit_approved',
+            telegram_id: deposit.profile.telegram_id,
+            amount: amount,
+            unique_code: deposit.unique_code,
+            payment_method: deposit.payment_method,
+            new_balance: newBalance
+          })
+        })
+      } catch (e) {
+        console.error('Failed to notify user about MMK deposit approval:', e)
+      }
+    }
+
+    await answerCb(cbId, '✅ အတည်ပြုပြီး!')
+    
+    await editText(chatId, msgId, `✅ *MMK ငွေသွင်းမှု အတည်ပြုပြီး!*
+
+╔══════════════════════════════╗
+║                              ║
+║   ${methodIcon} *DEPOSIT APPROVED*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${amount.toLocaleString()} MMK
+${methodIcon} *Payment:* ${methodName}
+🔑 *Code:* \`${deposit.unique_code || 'N/A'}\`
+👤 *User:* ${deposit.profile?.telegram_username ? `@${deposit.profile.telegram_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💰 User Balance သို့ ထည့်သွင်းပြီးပါပြီ
+✅ User ထံ အကြောင်းကြားပြီးပါပြီ`)
+
+  } else {
+    // Reject deposit (don't credit balance)
+    await supabase.from('deposits').update({ 
+      status: 'rejected',
+      admin_notes: 'Rejected by admin'
+    }).eq('id', depositId)
+
+    // Notify user
+    if (deposit.profile?.telegram_id) {
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/notify-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+          },
+          body: JSON.stringify({
+            type: 'mmk_deposit_rejected',
+            telegram_id: deposit.profile.telegram_id,
+            amount: amount,
+            unique_code: deposit.unique_code,
+            payment_method: deposit.payment_method
+          })
+        })
+      } catch (e) {
+        console.error('Failed to notify user about MMK deposit rejection:', e)
+      }
+    }
+
+    await answerCb(cbId, '❌ ငြင်းပယ်ပြီး!')
+    
+    await editText(chatId, msgId, `❌ *MMK ငွေသွင်းမှု ငြင်းပယ်ပြီး*
+
+╔══════════════════════════════╗
+║                              ║
+║   ${methodIcon} *DEPOSIT REJECTED*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${amount.toLocaleString()} MMK
+${methodIcon} *Payment:* ${methodName}
+🔑 *Code:* \`${deposit.unique_code || 'N/A'}\`
+👤 *User:* ${deposit.profile?.telegram_username ? `@${deposit.profile.telegram_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ User ထံ အကြောင်းကြားပြီးပါပြီ`)
+  }
+}
+
 // ==================== MAIN HANDLERS ====================
 async function handleMessage(msg: { chat: { id: number }; from?: { username?: string }; text?: string; message_id: number; photo?: Array<{ file_id: string; file_unique_id: string; width: number; height: number }> }) {
   const chatId = msg.chat.id
@@ -3380,7 +3741,23 @@ Bot ကောင်းစွာအလုပ်လုပ်နေပါသည်!
     }
   }
 
-  // MMK withdrawal phone number input
+  // MMK withdrawal account name input (step 1)
+  if (state?.action === 'wm_account_name' && state.msgId) {
+    const accountName = text.trim().substring(0, 100)
+    if (!accountName || accountName.length < 2) {
+      await editText(chatId, state.msgId, `❌ *အကောင့်နာမည် မှားနေပါသည်*\n\nအကောင့်နာမည် ထပ်ရိုက်ပါ:`, cancelBtn())
+      await deleteMsg(chatId, inMsgId)
+      return
+    }
+    const stateData = state.data as { amount?: number; paymentMethod?: string } | undefined
+    const amount = Number(stateData?.amount) || 0
+    const paymentMethod = String(stateData?.paymentMethod || 'KBZPAY')
+    await showWithdrawMMKPhonePrompt(chatId, state.msgId, amount, paymentMethod, accountName, username)
+    await deleteMsg(chatId, inMsgId)
+    return
+  }
+
+  // MMK withdrawal phone number input (step 2)
   if (state?.action === 'wm_phone' && state.msgId) {
     await handleMMKWithdrawRequest(chatId, text, state.msgId, username)
     await deleteMsg(chatId, inMsgId)
@@ -3574,10 +3951,8 @@ async function handleCallback(cb: { id: string; from: { id: number; username?: s
     await answerCb(cb.id)
     const state = await getUserState(chatId)
     const amount = Number(state?.data?.amount) || 0
-    const fee = Number(state?.data?.fee) || 0
-    const receiveAmount = Number(state?.data?.receiveAmount) || 0
     
-    await showWithdrawMMKPhonePrompt(chatId, msgId, amount, action, username)
+    await showWithdrawMMKAccountNamePrompt(chatId, msgId, amount, action, username)
     return
   }
 
@@ -3690,6 +4065,18 @@ async function handleCallback(cb: { id: string; from: { id: number; username?: s
   // Admin dispute resolution callback: adm:dcomp|dcanc:<txLink>
   if (type === 'adm' && (action === 'dcomp' || action === 'dcanc')) {
     await handleAdminDisputeResolve(chatId, msgId, id, action === 'dcomp' ? 'completed' : 'cancelled', cb.id, telegramId)
+    return
+  }
+
+  // Admin MMK withdrawal approval callback: adm:mwdap|mwdrej:<withdrawalId>
+  if (type === 'adm' && (action === 'mwdap' || action === 'mwdrej')) {
+    await handleAdminMMKWithdrawalResolve(chatId, msgId, id, action === 'mwdap' ? 'approved' : 'rejected', cb.id, telegramId)
+    return
+  }
+
+  // Admin MMK deposit approval callback: adm:mdepap|mdeprej:<depositId>
+  if (type === 'adm' && (action === 'mdepap' || action === 'mdeprej')) {
+    await handleAdminMMKDepositResolve(chatId, msgId, id, action === 'mdepap' ? 'approved' : 'rejected', cb.id, telegramId)
     return
   }
 
