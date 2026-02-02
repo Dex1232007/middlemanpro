@@ -43,8 +43,10 @@ interface DashboardStats {
   pendingTransactions: number;
   completedTransactions: number;
   disputedTransactions: number;
-  totalVolume: number;
-  totalCommission: number;
+  totalVolumeTON: number;
+  totalVolumeMMK: number;
+  totalCommissionTON: number;
+  totalCommissionMMK: number;
   totalUsers: number;
   pendingWithdrawals: number;
   pendingDeposits: number;
@@ -92,7 +94,7 @@ export default function AdminDashboard() {
       // Fetch all transactions for stats
       const { data: allTransactions, error: allTxError } = await supabase
         .from('transactions')
-        .select('status, amount_ton, commission_ton');
+        .select('status, amount_ton, amount_mmk, commission_ton, currency');
 
       if (allTxError) throw allTxError;
 
@@ -174,16 +176,24 @@ export default function AdminDashboard() {
       ) || [];
       const disputedTx = allTransactions?.filter(t => t.status === 'disputed') || [];
 
-      const totalVolume = completedTx.reduce((sum, t) => sum + Number(t.amount_ton), 0);
-      const totalCommission = completedTx.reduce((sum, t) => sum + Number(t.commission_ton), 0);
+      // Separate by currency
+      const completedTON = completedTx.filter(t => t.currency === 'TON');
+      const completedMMK = completedTx.filter(t => t.currency === 'MMK');
+
+      const totalVolumeTON = completedTON.reduce((sum, t) => sum + Number(t.amount_ton), 0);
+      const totalVolumeMMK = completedMMK.reduce((sum, t) => sum + Number(t.amount_mmk || 0), 0);
+      const totalCommissionTON = completedTON.reduce((sum, t) => sum + Number(t.commission_ton), 0);
+      const totalCommissionMMK = completedMMK.reduce((sum, t) => sum + Number(t.commission_ton), 0); // commission stored in commission_ton field
 
       setStats({
         totalTransactions: allTransactions?.length || 0,
         pendingTransactions: pendingTx.length,
         completedTransactions: completedTx.length,
         disputedTransactions: disputedTx.length,
-        totalVolume,
-        totalCommission,
+        totalVolumeTON,
+        totalVolumeMMK,
+        totalCommissionTON,
+        totalCommissionMMK,
         totalUsers: usersCount || 0,
         pendingWithdrawals: pendingWithdrawals || 0,
         pendingDeposits,
@@ -213,7 +223,7 @@ export default function AdminDashboard() {
   return (
     <AdminLayout title="Dashboard" subtitle="စနစ်အကျဉ်းချုပ်">
       {/* Stats Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <StatsCard
           title="စုစုပေါင်း ရောင်းဝယ်မှု"
           value={stats?.totalTransactions || 0}
@@ -226,13 +236,15 @@ export default function AdminDashboard() {
           icon={<Users className="h-6 w-6" />}
         />
         <StatsCard
-          title="စုစုပေါင်း ပမာဏ (TON)"
-          value={stats?.totalVolume?.toFixed(2) || '0.00'}
+          title="💎 TON Volume"
+          value={`${stats?.totalVolumeTON?.toFixed(2) || '0.00'} TON`}
+          subtitle={`ကော်မရှင်: ${stats?.totalCommissionTON?.toFixed(2) || '0.00'} TON`}
           icon={<TrendingUp className="h-6 w-6" />}
         />
         <StatsCard
-          title="ကော်မရှင် (TON)"
-          value={stats?.totalCommission?.toFixed(2) || '0.00'}
+          title="💵 MMK Volume"
+          value={`${(stats?.totalVolumeMMK || 0).toLocaleString()} K`}
+          subtitle={`ကော်မရှင်: ${(stats?.totalCommissionMMK || 0).toLocaleString()} K`}
           icon={<Wallet className="h-6 w-6" />}
         />
       </div>
