@@ -25,6 +25,7 @@ export type Database = {
           expires_at: string | null
           id: string
           is_confirmed: boolean
+          linked_transaction_id: string | null
           payment_method: string | null
           profile_id: string
           screenshot_url: string | null
@@ -43,6 +44,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           is_confirmed?: boolean
+          linked_transaction_id?: string | null
           payment_method?: string | null
           profile_id: string
           screenshot_url?: string | null
@@ -61,6 +63,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           is_confirmed?: boolean
+          linked_transaction_id?: string | null
           payment_method?: string | null
           profile_id?: string
           screenshot_url?: string | null
@@ -70,6 +73,13 @@ export type Database = {
           unique_code?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "deposits_linked_transaction_id_fkey"
+            columns: ["linked_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "deposits_profile_id_fkey"
             columns: ["profile_id"]
