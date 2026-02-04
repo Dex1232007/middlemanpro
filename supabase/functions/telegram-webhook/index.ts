@@ -467,36 +467,34 @@ const confirmBtns = (txId: string) => ({
   ],
 });
 
-// Buy buttons with balance option - now links deposit to transaction for auto-confirm
+// Buy buttons with balance option - direct payment for MMK purchases
 const buyBtns = (txId: string, hasBalance: boolean, lang: Language = 'my', settings?: PaymentMethodSettings, isMMK = false) => {
-  if (hasBalance) {
-    return {
-      inline_keyboard: [
-        [{ text: "💰 Balance ဖြင့်ဝယ်မည်", callback_data: `buy:bal:${txId}` }],
-        [{ text: "🏠 ပင်မစာမျက်နှာ", callback_data: "m:home" }],
-      ],
-    };
-  }
-  
-  // No balance - show deposit options linked to transaction for auto-confirm after deposit
   const buttons: { text: string; callback_data: string }[][] = [];
   
+  // If user has enough balance, show balance payment option
+  if (hasBalance) {
+    buttons.push([{ text: `💰 ${lang === 'en' ? 'Pay with Balance' : 'Balance ဖြင့်ဝယ်မည်'}`, callback_data: `buy:bal:${txId}` }]);
+  }
+  
+  // For MMK transactions - ALWAYS show direct payment options (manual payment flow)
   if (isMMK) {
-    // MMK transaction - show MMK deposit options linked to this transaction
+    // Show direct payment options for MMK (pay now, not deposit to balance)
     if (settings?.kbzpayEnabled !== false) {
-      buttons.push([{ text: `📱 KBZPay ${lang === 'en' ? 'Deposit & Buy' : 'သွင်းပြီးဝယ်မည်'}`, callback_data: `buydep:KBZPAY:${txId}` }]);
+      buttons.push([{ text: `📱 KBZPay ${lang === 'en' ? 'Pay Now' : 'ချေမည်'}`, callback_data: `paynow:KBZPAY:${txId}` }]);
     }
     if (settings?.wavepayEnabled !== false) {
-      buttons.push([{ text: `📲 WavePay ${lang === 'en' ? 'Deposit & Buy' : 'သွင်းပြီးဝယ်မည်'}`, callback_data: `buydep:WAVEPAY:${txId}` }]);
+      buttons.push([{ text: `📲 WavePay ${lang === 'en' ? 'Pay Now' : 'ချေမည်'}`, callback_data: `paynow:WAVEPAY:${txId}` }]);
     }
     
     // If no MMK methods available, show message
-    if (buttons.length === 0) {
-      buttons.push([{ text: "❌ MMK ငွေသွင်းခြင်း ပိတ်ထားပါသည်", callback_data: "m:home" }]);
+    if (!hasBalance && buttons.length === 0) {
+      buttons.push([{ text: `❌ ${lang === 'en' ? 'Payment unavailable' : 'ငွေချေခြင်း မရနိုင်ပါ'}`, callback_data: "m:home" }]);
     }
   } else {
-    // TON transaction - show TON deposit option
-    buttons.push([{ text: "💎 TON ငွေသွင်းမည်", callback_data: "dpm:TON" }]);
+    // TON transaction without balance - show TON deposit option
+    if (!hasBalance) {
+      buttons.push([{ text: "💎 TON ငွေသွင်းမည်", callback_data: "dpm:TON" }]);
+    }
   }
   
   buttons.push([{ text: "🏠 ပင်မစာမျက်နှာ", callback_data: "m:home" }]);
@@ -1461,15 +1459,13 @@ ${currentLang === "en" ? "Select your preferred language:" : "သင်နှစ
   }
 }
 
-// Show MMK deposit instructions (KBZPay/WavePay)
-// Optional linkedTransactionId for buy-with-deposit flow - auto-confirms transaction after deposit approval
+// Show MMK deposit instructions (KBZPay/WavePay) - for balance deposits only
 async function showDepositMMKInstructions(
   chatId: number,
   msgId: number,
   amount: number,
   paymentMethod: string,
   username?: string,
-  linkedTransactionId?: string,
 ) {
   const profile = await getProfile(chatId, username);
   const lang = (profile.language || "my") as Language;
@@ -1488,35 +1484,17 @@ async function showDepositMMKInstructions(
 
   await deleteMsg(chatId, msgId);
 
-  // Get transaction info if linked
-  let txInfo = "";
-  let productTitle = "";
-  if (linkedTransactionId) {
-    const { data: tx } = await supabase
-      .from("transactions")
-      .select("*, products(*)")
-      .eq("id", linkedTransactionId)
-      .single();
-    if (tx?.products?.title) {
-      productTitle = tx.products.title;
-      txInfo = `
-📦 *${lang === "en" ? "Product" : "ပစ္စည်း"}:* ${productTitle}
-✨ *${lang === "en" ? "Auto-confirm after approval" : "အတည်ပြုပြီး အလိုအလျောက် ဝယ်ယူပေးမည်"}*
-`;
-    }
-  }
-
-  const text = `${methodIcon} *${methodName} ${linkedTransactionId ? (lang === "en" ? "Deposit & Buy" : "သွင်းပြီးဝယ်မည်") : (lang === "en" ? "Deposit" : "ငွေသွင်း")}*
+  const text = `${methodIcon} *${methodName} ${lang === "en" ? "Deposit" : "ငွေသွင်း"}*
 
 ╔══════════════════════════════╗
 ║                              ║
-║     💵 *${linkedTransactionId ? "DEPOSIT & BUY" : "DEPOSIT MMK"}*         ║
+║     💵 *DEPOSIT MMK*         ║
 ║                              ║
 ╚══════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 💵 *${lang === "en" ? "Amount" : "ပမာဏ"}:* ${amount.toLocaleString()} MMK
-🔑 *Code:* \`${uniqueCode}\`${txInfo}
+🔑 *Code:* \`${uniqueCode}\`
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📱 *${lang === "en" ? "Transfer to" : "ငွေလွှဲရန်"}:*
@@ -1529,7 +1507,7 @@ async function showDepositMMKInstructions(
 2️⃣ ${lang === "en" ? "Include code in note/memo" : "Note/Memo တွင် Code ထည့်ပါ"}
 3️⃣ ${lang === "en" ? "Send screenshot here" : "Screenshot ကို ဤနေရာမှ ပို့ပါ"}
 
-⏳ *${lang === "en" ? (linkedTransactionId ? "Admin will verify and auto-confirm purchase" : "Admin will verify and credit") : (linkedTransactionId ? "Admin စစ်ဆေးပြီး အလိုအလျောက် ဝယ်ယူပေးမည်" : "Admin စစ်ဆေးပြီး Credit ပေးပါမည်")}*
+⏳ *${lang === "en" ? "Admin will verify and credit" : "Admin စစ်ဆေးပြီး Credit ပေးပါမည်"}*
 ⏰ *${lang === "en" ? "Expires in 1 hour" : "သက်တမ်း: ၁ နာရီ"}*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -1537,7 +1515,7 @@ async function showDepositMMKInstructions(
 
   const newMsgId = await sendMessage(chatId, text, cancelBtn(lang));
 
-  // Save pending MMK deposit with optional linked transaction
+  // Save pending MMK deposit (balance deposit, no linked transaction)
   await supabase.from("deposits").insert({
     profile_id: profile.id,
     amount_ton: amount, // Using amount_ton field but it's actually MMK
@@ -1548,7 +1526,7 @@ async function showDepositMMKInstructions(
     expires_at: expiresAt.toISOString(),
     status: "pending",
     telegram_msg_id: newMsgId,
-    linked_transaction_id: linkedTransactionId || null,
+    linked_transaction_id: null,
   });
 
   // Set state to wait for screenshot
@@ -1556,6 +1534,110 @@ async function showDepositMMKInstructions(
     action: "dep_mmk_screenshot",
     msgId: newMsgId || undefined,
     data: { amount, paymentMethod, uniqueCode },
+  });
+}
+
+// Show MMK direct payment instructions for marketplace purchases
+// This is for paying for a specific transaction, NOT depositing to balance
+async function showPayNowMMKInstructions(
+  chatId: number,
+  msgId: number,
+  transactionId: string,
+  paymentMethod: string,
+  username?: string,
+) {
+  const profile = await getProfile(chatId, username);
+  const lang = (profile.language || "my") as Language;
+
+  // Get transaction details
+  const { data: tx } = await supabase
+    .from("transactions")
+    .select("*, products(*), seller:profiles!transactions_seller_id_fkey(telegram_username)")
+    .eq("id", transactionId)
+    .single();
+  
+  if (!tx) {
+    await sendMessage(chatId, `❌ *${lang === "en" ? "Transaction not found" : "ရောင်းဝယ်မှု ရှာမတွေ့ပါ"}*`, mainMenu());
+    return;
+  }
+
+  const amount = Number(tx.amount_mmk || 0);
+  if (amount <= 0) {
+    await sendMessage(chatId, `❌ *${lang === "en" ? "Invalid amount" : "ပမာဏ မမှန်ကန်ပါ"}*`, mainMenu());
+    return;
+  }
+
+  // Get payment account info from settings
+  const settingKey = paymentMethod === "KBZPAY" ? "kbzpay_account" : "wavepay_account";
+  const { data: accountSetting } = await supabase.from("settings").select("value").eq("key", settingKey).maybeSingle();
+  const accountInfo = accountSetting?.value || (lang === "en" ? "Not configured" : "မသတ်မှတ်ရသေးပါ");
+
+  const methodName = paymentMethod === "KBZPAY" ? "KBZPay" : "WavePay";
+  const methodIcon = paymentMethod === "KBZPAY" ? "📱" : "📲";
+
+  // Generate unique payment code
+  const uniqueCode = crypto.randomUUID().replace(/-/g, "").substring(0, 6).toUpperCase();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
+
+  await deleteMsg(chatId, msgId);
+
+  const productTitle = tx.products?.title || "Product";
+  const sellerUsername = tx.seller?.telegram_username ? `@${tx.seller.telegram_username}` : "Seller";
+
+  const text = `${methodIcon} *${methodName} ${lang === "en" ? "Payment" : "ငွေချေရန်"}*
+
+╔══════════════════════════════╗
+║                              ║
+║     💵 *PAY FOR PURCHASE*    ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${lang === "en" ? "Product" : "ပစ္စည်း"}:* ${productTitle}
+💵 *${lang === "en" ? "Amount" : "ပမာဏ"}:* ${amount.toLocaleString()} MMK
+🏪 *${lang === "en" ? "Seller" : "ရောင်းသူ"}:* ${sellerUsername}
+🔑 *Code:* \`${uniqueCode}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📱 *${lang === "en" ? "Transfer to" : "ငွေလွှဲရန်"}:*
+\`${accountInfo}\`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 *${lang === "en" ? "Instructions" : "လုပ်ဆောင်ရန်"}:*
+1️⃣ ${lang === "en" ? "Transfer to above account" : "အထက်ပါ Account သို့ ငွေလွှဲပါ"}
+2️⃣ ${lang === "en" ? "Include code in note/memo" : "Note/Memo တွင် Code ထည့်ပါ"}
+3️⃣ ${lang === "en" ? "Send screenshot here" : "Screenshot ကို ဤနေရာမှ ပို့ပါ"}
+
+⏳ *${lang === "en" ? "Admin will verify and confirm purchase" : "Admin စစ်ဆေးပြီး ဝယ်ယူမှု အတည်ပြုပေးမည်"}*
+⏰ *${lang === "en" ? "Expires in 1 hour" : "သက်တမ်း: ၁ နာရီ"}*
+
+⚠️ *${lang === "en" ? "This payment is for purchase only, NOT balance deposit" : "ဤငွေချေမှုသည် ဝယ်ယူရန်သာ၊ Balance သို့မထည့်ပါ"}*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📸 *${lang === "en" ? "Send payment screenshot now" : "ငွေလွှဲပြီး Screenshot ပို့ပါ"}:*`;
+
+  const newMsgId = await sendMessage(chatId, text, cancelBtn(lang));
+
+  // Save pending payment linked to transaction (this is direct payment, not balance deposit)
+  await supabase.from("deposits").insert({
+    profile_id: profile.id,
+    amount_ton: amount, // Using amount_ton field but it's actually MMK
+    currency: "MMK",
+    payment_method: paymentMethod,
+    is_confirmed: false,
+    unique_code: uniqueCode,
+    expires_at: expiresAt.toISOString(),
+    status: "pending",
+    telegram_msg_id: newMsgId,
+    linked_transaction_id: transactionId, // Link to transaction for auto-confirm
+  });
+
+  // Set state to wait for screenshot
+  await setUserState(chatId, {
+    action: "dep_mmk_screenshot",
+    msgId: newMsgId || undefined,
+    data: { amount, paymentMethod, uniqueCode, isDirectPayment: true, transactionId },
   });
 }
 
@@ -2977,7 +3059,7 @@ async function handleBuyLink(chatId: number, link: string, username?: string) {
   const displayBalance = isMMK ? `${buyerBalance.toLocaleString()} MMK` : `${buyerBalance.toFixed(2)} TON`;
 
   if (isMMK) {
-    // MMK transaction - balance payment only (no QR)
+    // MMK transaction - show balance and/or direct payment options
     let caption = `🛒 *${lang === "en" ? "Purchase" : "ဝယ်ယူရန်"}*
 
 ╔══════════════════════════════╗
@@ -2998,16 +3080,15 @@ ${sellerRating}
     if (hasEnoughBalance) {
       caption += `
 
-✅ *${lang === "en" ? "You can pay with balance!" : "Balance နဲ့ ဝယ်နိုင်ပါတယ်!"}*
-
-👆 ${lang === "en" ? "Click the button below to pay" : "အောက်က ခလုပ်နှိပ်ပြီး ငွေချေပါ"}`;
-    } else {
-      caption += `
-
-❌ *${lang === "en" ? "Insufficient balance" : "လက်ကျန်ငွေ မလုံလောက်ပါ"}*
-
-💰 ${lang === "en" ? "Please deposit MMK first" : "ပထမဦးစွာ MMK ငွေသွင်းပါ"}`;
+✅ *${lang === "en" ? "You can pay with balance!" : "Balance နဲ့ ဝယ်နိုင်ပါတယ်!"}*`;
     }
+    
+    caption += `
+
+📱 *${lang === "en" ? "Payment Options" : "ငွေချေနည်းလမ်းများ"}:*
+${hasEnoughBalance ? `• ${lang === "en" ? "Pay with MMK Balance" : "MMK Balance ဖြင့်ချေမည்"}\n` : ""}• ${lang === "en" ? "Pay directly via KBZPay/WavePay" : "KBZPay/WavePay ဖြင့် တိုက်ရိုက်ချေမည်"}
+
+👆 ${lang === "en" ? "Choose payment method below" : "အောက်မှ ငွေချေနည်းရွေးပါ"}`;
 
     const msgId = await sendMessage(chatId, caption, buyBtns(tx.id, hasEnoughBalance, lang, paymentSettings, true));
     if (msgId) {
@@ -4327,14 +4408,19 @@ async function handleAdminMMKDepositResolve(
 
     await answerCb(cbId, "✅ အတည်ပြုပြီး!");
 
+    // Different message for direct payment vs balance deposit
+    const isDirectPayment = !!linkedTx;
+    const headerText = isDirectPayment ? "PAYMENT APPROVED" : "DEPOSIT APPROVED";
+    const titleText = isDirectPayment ? "MMK ဝယ်ယူမှုငွေချေ အတည်ပြုပြီး!" : "MMK ငွေသွင်းမှု အတည်ပြုပြီး!";
+
     await editText(
       chatId,
       msgId,
-      `✅ *MMK ငွေသွင်းမှု အတည်ပြုပြီး!*
+      `✅ *${titleText}*
 
 ╔══════════════════════════════╗
 ║                              ║
-║   ${methodIcon} *DEPOSIT APPROVED*     ║
+║   ${methodIcon} *${headerText}*     ║
 ║                              ║
 ╚══════════════════════════════╝
 
@@ -4344,7 +4430,7 @@ ${methodIcon} *Payment:* ${methodName}
 🔑 *Code:* \`${deposit.unique_code || "N/A"}\`
 👤 *User:* ${deposit.profile?.telegram_username ? `@${deposit.profile.telegram_username}` : "Unknown"}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-${linkedTx ? autoConfirmMessage : `
+${isDirectPayment ? autoConfirmMessage : `
 💰 User Balance သို့ ထည့်သွင်းပြီးပါပြီ`}
 ✅ User ထံ အကြောင်းကြားပြီးပါပြီ`,
     );
@@ -5160,38 +5246,28 @@ async function handleCallback(cb: {
     return;
   }
 
-  // Buy with deposit callback (MMK): buydep:<paymentMethod>:<txId>
-  // This creates a deposit linked to the transaction for auto-confirmation after admin approval
+  // Direct payment callback (MMK): paynow:<paymentMethod>:<txId>
+  // This creates a payment linked to the transaction for auto-confirmation after admin approval
+  // Different from deposit - this goes directly to purchase, NOT to balance
+  if (type === "paynow") {
+    await answerCb(cb.id);
+    const paymentMethod = action; // KBZPAY or WAVEPAY
+    const txId = id;
+    
+    // Show direct payment instructions (linked to transaction)
+    await showPayNowMMKInstructions(chatId, msgId, txId, paymentMethod, username);
+    return;
+  }
+
+  // Legacy: Buy with deposit callback (MMK): buydep:<paymentMethod>:<txId>
+  // Keep for backward compatibility - redirect to new paynow flow
   if (type === "buydep") {
     await answerCb(cb.id);
     const paymentMethod = action; // KBZPAY or WAVEPAY
     const txId = id;
     
-    // Get transaction to find the amount
-    const { data: tx } = await supabase
-      .from("transactions")
-      .select("*, products(*)")
-      .eq("id", txId)
-      .single();
-    
-    if (!tx) {
-      await sendMessage(chatId, "❌ *ရောင်းဝယ်မှု ရှာမတွေ့ပါ*", mainMenu());
-      return;
-    }
-    
-    if (tx.status !== "pending_payment") {
-      await sendMessage(chatId, "❌ *ဤအရောင်းအဝယ် ပြီးဆုံးပြီး သို့မဟုတ် ပယ်ဖျက်ပြီးပါပြီ*", mainMenu());
-      return;
-    }
-    
-    const amount = Number(tx.amount_mmk || 0);
-    if (amount <= 0) {
-      await sendMessage(chatId, "❌ *ပမာဏ မမှန်ကန်ပါ*", mainMenu());
-      return;
-    }
-    
-    // Show deposit instructions with linked transaction ID for auto-confirm
-    await showDepositMMKInstructions(chatId, msgId, amount, paymentMethod, username, txId);
+    // Redirect to new pay now flow
+    await showPayNowMMKInstructions(chatId, msgId, txId, paymentMethod, username);
     return;
   }
 
