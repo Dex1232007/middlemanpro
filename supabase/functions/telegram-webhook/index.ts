@@ -1539,6 +1539,7 @@ async function showDepositMMKInstructions(
 
 // Show MMK direct payment instructions for marketplace purchases
 // This is for paying for a specific transaction, NOT depositing to balance
+// Uses PAYMENTS table (not deposits) with PAY_ prefix
 async function showPayNowMMKInstructions(
   chatId: number,
   msgId: number,
@@ -1575,8 +1576,8 @@ async function showPayNowMMKInstructions(
   const methodName = paymentMethod === "KBZPAY" ? "KBZPay" : "WavePay";
   const methodIcon = paymentMethod === "KBZPAY" ? "📱" : "📲";
 
-  // Generate unique payment code
-  const uniqueCode = crypto.randomUUID().replace(/-/g, "").substring(0, 6).toUpperCase();
+  // Generate unique payment code with PAY_ prefix (different from DEP_ for deposits)
+  const uniqueCode = `PAY_${crypto.randomUUID().replace(/-/g, "").substring(0, 6).toUpperCase()}`;
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
 
   await deleteMsg(chatId, msgId);
@@ -1619,29 +1620,175 @@ async function showPayNowMMKInstructions(
 
   const newMsgId = await sendMessage(chatId, text, cancelBtn(lang));
 
-  // Save pending payment linked to transaction (this is direct payment, not balance deposit)
-  await supabase.from("deposits").insert({
+  // Save pending payment to PAYMENTS table (NOT deposits)
+  // This is for direct purchase payment, not balance deposit
+  await supabase.from("payments").insert({
     profile_id: profile.id,
-    amount_ton: amount, // Using amount_ton field but it's actually MMK
-    currency: "MMK",
+    transaction_id: transactionId,
+    amount_mmk: amount,
     payment_method: paymentMethod,
-    is_confirmed: false,
+    payment_type: "direct_purchase",
     unique_code: uniqueCode,
     expires_at: expiresAt.toISOString(),
     status: "pending",
     telegram_msg_id: newMsgId,
-    linked_transaction_id: transactionId, // Link to transaction for auto-confirm
   });
 
-  // Set state to wait for screenshot
+  // Set state to wait for PAYMENT screenshot (different from deposit)
   await setUserState(chatId, {
-    action: "dep_mmk_screenshot",
+    action: "pay_mmk_screenshot",
     msgId: newMsgId || undefined,
-    data: { amount, paymentMethod, uniqueCode, isDirectPayment: true, transactionId },
+    data: { amount, paymentMethod, uniqueCode, transactionId },
   });
 }
 
-// Handle MMK deposit screenshot upload
+// Handle MMK PAYMENT screenshot upload (for direct purchases, NOT deposits)
+async function handleMMKPaymentScreenshot(
+  chatId: number,
+  photos: Array<{ file_id: string; file_unique_id: string; width: number; height: number }>,
+  stateData: { amount?: number; paymentMethod?: string; uniqueCode?: string; transactionId?: string },
+  username?: string,
+) {
+  const profile = await getProfile(chatId, username);
+  const lang = (profile.language || "my") as Language;
+
+  // Get the largest photo (best quality)
+  const largestPhoto = photos.reduce((prev, curr) =>
+    curr.width * curr.height > prev.width * prev.height ? curr : prev,
+  );
+
+  try {
+    // Get file path from Telegram
+    const fileRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file_id: largestPhoto.file_id }),
+    });
+    const fileData = await fileRes.json();
+
+    if (!fileData.ok || !fileData.result?.file_path) {
+      await sendMessage(
+        chatId,
+        `❌ *${lang === "en" ? "Failed to process photo" : "ဓာတ်ပုံ process မရပါ"}*
+
+${lang === "en" ? "Please try again" : "ထပ်မံကြိုးစားပါ"}`,
+        cancelBtn(lang),
+      );
+      return;
+    }
+
+    // Download photo from Telegram
+    const photoUrl = `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${fileData.result.file_path}`;
+    const photoResponse = await fetch(photoUrl);
+    const photoBlob = await photoResponse.arrayBuffer();
+
+    // Upload to Supabase Storage (payment-screenshots bucket)
+    const fileName = `${stateData.uniqueCode}_${Date.now()}.jpg`;
+    const { error: uploadError } = await supabase.storage
+      .from("payment-screenshots")
+      .upload(fileName, photoBlob, {
+        contentType: "image/jpeg",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error("Payment screenshot upload error:", uploadError);
+      await sendMessage(
+        chatId,
+        `❌ *${lang === "en" ? "Failed to upload screenshot" : "Screenshot တင်မရပါ"}*
+
+${lang === "en" ? "Please try again" : "ထပ်မံကြိုးစားပါ"}`,
+        cancelBtn(lang),
+      );
+      return;
+    }
+
+    // Get public URL
+    const { data: urlData } = supabase.storage.from("payment-screenshots").getPublicUrl(fileName);
+    const screenshotUrl = urlData.publicUrl;
+
+    // Update payment with screenshot URL and get payment ID
+    const { data: paymentRecord } = await supabase
+      .from("payments")
+      .update({ screenshot_url: screenshotUrl })
+      .eq("unique_code", stateData.uniqueCode)
+      .eq("profile_id", profile.id)
+      .select("id")
+      .single();
+
+    // Clear user state
+    await deleteUserState(chatId);
+
+    // Notify admin about new MMK payment with inline approve/reject buttons
+    if (paymentRecord?.id) {
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/notify-user`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            type: "admin_new_mmk_payment",
+            amount: stateData.amount,
+            user_telegram_username: profile.telegram_username,
+            unique_code: stateData.uniqueCode,
+            payment_method: stateData.paymentMethod,
+            currency: "MMK",
+            payment_id: paymentRecord.id,
+            transaction_id: stateData.transactionId,
+          }),
+        });
+        console.log("Admin notified about new MMK payment");
+      } catch (e) {
+        console.error("Failed to notify admin about MMK payment:", e);
+      }
+    }
+
+    // Get transaction details for success message
+    const { data: tx } = await supabase
+      .from("transactions")
+      .select("*, products(*)")
+      .eq("id", stateData.transactionId)
+      .single();
+
+    const productTitle = tx?.products?.title || "Product";
+
+    // Send success message (different from deposit - this is for purchase)
+    const successText = `✅ *${lang === "en" ? "Payment Screenshot Uploaded!" : "ငွေချေမှု Screenshot တင်ပြီးပါပြီ!"}*
+
+╔══════════════════════════════╗
+║                              ║
+║   📸 *PAYMENT SENT*          ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${lang === "en" ? "Product" : "ပစ္စည်း"}:* ${productTitle}
+💵 *${lang === "en" ? "Amount" : "ပမာဏ"}:* ${Number(stateData.amount).toLocaleString()} MMK
+🔑 *Code:* \`${stateData.uniqueCode}\`
+📱 *${lang === "en" ? "Payment" : "ငွေပေးချေမှု"}:* ${stateData.paymentMethod === "KBZPAY" ? "KBZPay" : "WavePay"}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⏳ *${lang === "en" ? "Admin will verify and confirm your purchase" : "Admin စစ်ဆေးပြီး ဝယ်ယူမှု အတည်ပြုပေးပါမည်"}*
+
+💡 *${lang === "en" ? "Note" : "မှတ်ချက်"}:* ${lang === "en" ? "You will receive notification when payment is approved" : "အတည်ပြုပြီးပါက အကြောင်းကြားပါမည်"}
+⚠️ *${lang === "en" ? "This payment goes directly to purchase, NOT to balance" : "ဤငွေချေမှုသည် ဝယ်ယူမှုအတွက်သာ၊ Balance သို့မထည့်ပါ"}*`;
+
+    await sendMessage(chatId, successText, backBtn(lang));
+  } catch (error) {
+    console.error("Payment screenshot handling error:", error);
+    await sendMessage(
+      chatId,
+      `❌ *${lang === "en" ? "Error processing screenshot" : "Screenshot process မရပါ"}*
+
+${lang === "en" ? "Please try again" : "ထပ်မံကြိုးစားပါ"}`,
+      cancelBtn(lang),
+    );
+  }
+}
+
+// Handle MMK deposit screenshot upload (for BALANCE deposits only)
 async function handleMMKDepositScreenshot(
   chatId: number,
   photos: Array<{ file_id: string; file_unique_id: string; width: number; height: number }>,
@@ -1681,9 +1828,9 @@ ${lang === "en" ? "Please try again" : "ထပ်မံကြိုးစား�
     const photoResponse = await fetch(photoUrl);
     const photoBlob = await photoResponse.arrayBuffer();
 
-    // Upload to Supabase Storage
+    // Upload to Supabase Storage (deposit-screenshots bucket)
     const fileName = `${stateData.uniqueCode}_${Date.now()}.jpg`;
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from("deposit-screenshots")
       .upload(fileName, photoBlob, {
         contentType: "image/jpeg",
@@ -1704,7 +1851,6 @@ ${lang === "en" ? "Please try again" : "ထပ်မံကြိုးစား�
 
     // Get public URL
     const { data: urlData } = supabase.storage.from("deposit-screenshots").getPublicUrl(fileName);
-
     const screenshotUrl = urlData.publicUrl;
 
     // Update deposit with screenshot URL and get deposit ID
@@ -1744,7 +1890,7 @@ ${lang === "en" ? "Please try again" : "ထပ်မံကြိုးစား�
       }
     }
 
-    // Send success message
+    // Send success message (for BALANCE deposit)
     const successText = `✅ *${lang === "en" ? "Screenshot Uploaded!" : "Screenshot တင်ပြီးပါပြီ!"}*
 
 ╔══════════════════════════════╗
@@ -4506,6 +4652,231 @@ ${linkedTx ? `
   }
 }
 
+// ==================== ADMIN MMK PAYMENT RESOLUTION ====================
+// This handles direct purchase payments (from payments table), NOT balance deposits
+async function handleAdminMMKPaymentResolve(
+  chatId: number,
+  msgId: number,
+  paymentId: string,
+  resolution: "approved" | "rejected",
+  cbId: string,
+  telegramId: number,
+) {
+  // Verify this user is an admin by checking admin_telegram_id setting
+  const { data: adminSetting } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("key", "admin_telegram_id")
+    .maybeSingle();
+
+  const adminTelegramId = adminSetting?.value ? parseInt(adminSetting.value) : null;
+
+  if (!adminTelegramId || telegramId !== adminTelegramId) {
+    await answerCb(cbId, "❌ Admin သာ ဖြေရှင်းနိုင်ပါသည်", true);
+    return;
+  }
+
+  // Find the payment with linked transaction
+  const { data: payment } = await supabase
+    .from("payments")
+    .select("*, profile:profiles!payments_profile_id_fkey(*)")
+    .eq("id", paymentId)
+    .single();
+
+  if (!payment) {
+    await answerCb(cbId, "❌ ငွေပေးချေမှု ရှာမတွေ့ပါ", true);
+    return;
+  }
+
+  if (payment.status !== "pending") {
+    await answerCb(cbId, "❌ ငွေပေးချေမှု pending status မဟုတ်တော့ပါ", true);
+    return;
+  }
+
+  const methodName = payment.payment_method === "KBZPAY" ? "KBZPay" : "WavePay";
+  const methodIcon = payment.payment_method === "KBZPAY" ? "📱" : "📲";
+  const amount = Number(payment.amount_mmk);
+  
+  // Get linked transaction
+  const { data: linkedTx } = await supabase
+    .from("transactions")
+    .select("*, products(*), seller:profiles!transactions_seller_id_fkey(*), buyer:profiles!transactions_buyer_id_fkey(*)")
+    .eq("id", payment.transaction_id)
+    .single();
+
+  if (resolution === "approved") {
+    // Approve payment
+    await supabase
+      .from("payments")
+      .update({
+        status: "approved",
+        admin_approved_at: new Date().toISOString(),
+      })
+      .eq("id", paymentId);
+
+    // Auto-confirm the transaction (this is direct payment, NOT balance)
+    if (linkedTx && linkedTx.status === "pending_payment") {
+      console.log(`Auto-confirming transaction ${payment.transaction_id} after payment approval`);
+      
+      // Update transaction to payment_received
+      await supabase
+        .from("transactions")
+        .update({ 
+          status: "payment_received",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", payment.transaction_id);
+
+      // Notify buyer about payment confirmation
+      if (payment.profile?.telegram_id) {
+        const buyerMsg = `✅ *ငွေပေးချေမှု အတည်ပြုပြီး!*
+
+╔══════════════════════════════╗
+║                              ║
+║   💵 *PAYMENT CONFIRMED*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${linkedTx.products?.title || "Product"}*
+💵 *${amount.toLocaleString()} MMK*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ ငွေပေးချေမှု အတည်ပြုပြီးပါပြီ
+⏳ ရောင်းသူမှ ပစ္စည်းပို့ရန် စောင့်ပါ
+
+🏪 ရောင်းသူ: ${linkedTx.seller?.telegram_username ? `@${linkedTx.seller.telegram_username}` : "Seller"}`;
+
+        await sendMessage(payment.profile.telegram_id, buyerMsg, {
+          inline_keyboard: [
+            ...(linkedTx.seller?.telegram_username ? [[{ text: "💬 ရောင်းသူနဲ့ Chat", url: `https://t.me/${linkedTx.seller.telegram_username}` }]] : []),
+            [{ text: "🏠 ပင်မစာမျက်နှာ", callback_data: "m:home" }]
+          ]
+        });
+      }
+      
+      // Notify seller about new paid order
+      if (linkedTx.seller?.telegram_id) {
+        const sellerMsg = `🎉 *အမှာစာအသစ် ငွေပေးပြီး!*
+
+╔══════════════════════════════╗
+║                              ║
+║   💵 *NEW PAID ORDER*        ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${linkedTx.products?.title || "Product"}*
+💵 *${amount.toLocaleString()} MMK*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ ဝယ်သူမှ ငွေပေးချေပြီးပါပြီ
+📦 *ပစ္စည်းပို့ပေးပါ!*
+
+👤 ဝယ်သူ: ${linkedTx.buyer?.telegram_username ? `@${linkedTx.buyer.telegram_username}` : "Buyer"}`;
+
+        await sendMessage(linkedTx.seller.telegram_id, sellerMsg, sellerBtns(payment.transaction_id, linkedTx.buyer?.telegram_username));
+      }
+    }
+
+    await answerCb(cbId, "✅ အတည်ပြုပြီး!");
+
+    await editText(
+      chatId,
+      msgId,
+      `✅ *MMK ဝယ်ယူမှုငွေချေ အတည်ပြုပြီး!*
+
+╔══════════════════════════════╗
+║                              ║
+║   ${methodIcon} *PAYMENT APPROVED*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${linkedTx?.products?.title || "Product"}*
+💵 *ပမာဏ:* ${amount.toLocaleString()} MMK
+${methodIcon} *Payment:* ${methodName}
+🔑 *Code:* \`${payment.unique_code || "N/A"}\`
+👤 *User:* ${payment.profile?.telegram_username ? `@${payment.profile.telegram_username}` : "Unknown"}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🛒 *ရောင်းဝယ်မှု အလိုအလျောက် အတည်ပြုပြီး!*
+✅ User ထံ အကြောင်းကြားပြီးပါပြီ`,
+    );
+  } else {
+    // Reject payment
+    await supabase
+      .from("payments")
+      .update({
+        status: "rejected",
+        admin_notes: "Rejected by admin",
+      })
+      .eq("id", paymentId);
+
+    // Cancel the transaction
+    if (linkedTx && linkedTx.status === "pending_payment") {
+      await supabase
+        .from("transactions")
+        .update({
+          status: "cancelled",
+          buyer_id: null,
+          buyer_telegram_id: null,
+          expires_at: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", payment.transaction_id);
+    }
+
+    // Notify user about rejection
+    if (payment.profile?.telegram_id) {
+      const rejectMsg = `❌ *ငွေပေးချေမှု ငြင်းပယ်ခံရပါပြီ*
+
+╔══════════════════════════════╗
+║                              ║
+║   ${methodIcon} *PAYMENT REJECTED*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${linkedTx?.products?.title || "Product"}*
+💵 *ပမာဏ:* ${amount.toLocaleString()} MMK
+${methodIcon} *Payment:* ${methodName}
+🔑 *Code:* \`${payment.unique_code || "N/A"}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ ဝယ်ယူမှု ပယ်ဖျက်ခံရပါပြီ
+⚠️ ပြန်လည်ကြိုးစားလိုပါက အသစ်ထပ်မံဝယ်ယူပါ`;
+
+      await sendMessage(payment.profile.telegram_id, rejectMsg, backBtn("my"));
+    }
+
+    await answerCb(cbId, "❌ ငြင်းပယ်ပြီး!");
+
+    await editText(
+      chatId,
+      msgId,
+      `❌ *MMK ဝယ်ယူမှုငွေချေ ငြင်းပယ်ပြီး*
+
+╔══════════════════════════════╗
+║                              ║
+║   ${methodIcon} *PAYMENT REJECTED*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${linkedTx?.products?.title || "Product"}*
+💵 *ပမာဏ:* ${amount.toLocaleString()} MMK
+${methodIcon} *Payment:* ${methodName}
+🔑 *Code:* \`${payment.unique_code || "N/A"}\`
+👤 *User:* ${payment.profile?.telegram_username ? `@${payment.profile.telegram_username}` : "Unknown"}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ ရောင်းဝယ်မှု ပယ်ဖျက်ပြီးပါပြီ
+❌ User ထံ အကြောင်းကြားပြီးပါပြီ`,
+    );
+  }
+}
+
 // ==================== MAIN HANDLERS ====================
 async function handleMessage(msg: {
   chat: { id: number };
@@ -4654,9 +5025,15 @@ Bot ကောင်းစွာအလုပ်လုပ်နေပါသည်!
 
   // All navigation is via inline keyboard callbacks - no text keyboard handlers needed
 
-  // Handle photo upload for MMK deposit screenshot
+  // Handle photo upload for MMK payment screenshot (direct purchase - uses payments table)
   if (msg.photo && msg.photo.length > 0) {
     const state = await getUserState(chatId);
+    if (state?.action === "pay_mmk_screenshot" && state.data?.uniqueCode) {
+      await handleMMKPaymentScreenshot(chatId, msg.photo, state.data, username);
+      await deleteMsg(chatId, inMsgId);
+      return;
+    }
+    // Handle photo upload for MMK deposit screenshot (balance deposit - uses deposits table)
     if (state?.action === "dep_mmk_screenshot" && state.data?.uniqueCode) {
       await handleMMKDepositScreenshot(chatId, msg.photo, state.data, username);
       await deleteMsg(chatId, inMsgId);
@@ -5228,12 +5605,27 @@ async function handleCallback(cb: {
   }
 
   // Admin MMK deposit approval callback: adm:mdepap|mdeprej:<depositId>
+  // This is for BALANCE deposits only (uses deposits table)
   if (type === "adm" && (action === "mdepap" || action === "mdeprej")) {
     await handleAdminMMKDepositResolve(
       chatId,
       msgId,
       id,
       action === "mdepap" ? "approved" : "rejected",
+      cb.id,
+      telegramId,
+    );
+    return;
+  }
+
+  // Admin MMK payment approval callback: adm:mpayap|mpayrej:<paymentId>
+  // This is for DIRECT PURCHASE payments only (uses payments table)
+  if (type === "adm" && (action === "mpayap" || action === "mpayrej")) {
+    await handleAdminMMKPaymentResolve(
+      chatId,
+      msgId,
+      id,
+      action === "mpayap" ? "approved" : "rejected",
       cb.id,
       telegramId,
     );
