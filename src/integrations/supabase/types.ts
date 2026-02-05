@@ -27,6 +27,7 @@ export type Database = {
           is_confirmed: boolean
           linked_transaction_id: string | null
           payment_method: string | null
+          payment_type: string | null
           profile_id: string
           screenshot_url: string | null
           status: string
@@ -46,6 +47,7 @@ export type Database = {
           is_confirmed?: boolean
           linked_transaction_id?: string | null
           payment_method?: string | null
+          payment_type?: string | null
           profile_id: string
           screenshot_url?: string | null
           status?: string
@@ -65,6 +67,7 @@ export type Database = {
           is_confirmed?: boolean
           linked_transaction_id?: string | null
           payment_method?: string | null
+          payment_type?: string | null
           profile_id?: string
           screenshot_url?: string | null
           status?: string
@@ -130,6 +133,75 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      payments: {
+        Row: {
+          admin_approved_at: string | null
+          admin_notes: string | null
+          amount_mmk: number
+          created_at: string | null
+          expires_at: string
+          id: string
+          payment_method: string
+          payment_type: string
+          profile_id: string
+          screenshot_url: string | null
+          status: string
+          telegram_msg_id: number | null
+          transaction_id: string
+          unique_code: string
+          updated_at: string | null
+        }
+        Insert: {
+          admin_approved_at?: string | null
+          admin_notes?: string | null
+          amount_mmk: number
+          created_at?: string | null
+          expires_at: string
+          id?: string
+          payment_method: string
+          payment_type?: string
+          profile_id: string
+          screenshot_url?: string | null
+          status?: string
+          telegram_msg_id?: number | null
+          transaction_id: string
+          unique_code: string
+          updated_at?: string | null
+        }
+        Update: {
+          admin_approved_at?: string | null
+          admin_notes?: string | null
+          amount_mmk?: number
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          payment_method?: string
+          payment_type?: string
+          profile_id?: string
+          screenshot_url?: string | null
+          status?: string
+          telegram_msg_id?: number | null
+          transaction_id?: string
+          unique_code?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       products: {
         Row: {
