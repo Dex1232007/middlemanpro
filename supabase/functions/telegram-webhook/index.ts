@@ -3617,7 +3617,11 @@ ${currencyIcon} *${amountDisplay}*
 
     // Edit existing buyer message if available, otherwise send new
     if (tx.buyer_msg_id) {
-      await editText(tx.buyer.telegram_id, tx.buyer_msg_id, buyerMsg, buyerBtns(txId, tx.seller?.telegram_username));
+      const edited = await editText(tx.buyer.telegram_id, tx.buyer_msg_id, buyerMsg, buyerBtns(txId, tx.seller?.telegram_username));
+      if (!edited) {
+        // If edit fails (e.g. message was a photo or deleted), send new message
+        await sendMessage(tx.buyer.telegram_id, buyerMsg, buyerBtns(txId, tx.seller?.telegram_username));
+      }
     } else {
       await sendMessage(tx.buyer.telegram_id, buyerMsg, buyerBtns(txId, tx.seller?.telegram_username));
     }
@@ -4651,12 +4655,16 @@ async function handleAdminMMKPaymentResolve(
 
 🏪 ရောင်းသူ: ${linkedTx.seller?.telegram_username ? `@${linkedTx.seller.telegram_username}` : "Seller"}`;
 
-        await sendMessage(payment.profile.telegram_id, buyerMsg, {
+        const newBuyerMsgId = await sendMessage(payment.profile.telegram_id, buyerMsg, {
           inline_keyboard: [
             ...(linkedTx.seller?.telegram_username ? [[{ text: "💬 ရောင်းသူနဲ့ Chat", url: `https://t.me/${linkedTx.seller.telegram_username}` }]] : []),
             [{ text: "🏠 ပင်မစာမျက်နှာ", callback_data: "m:home" }]
           ]
         });
+        // Update buyer_msg_id so handleItemSent can edit this message later
+        if (newBuyerMsgId) {
+          await supabase.from("transactions").update({ buyer_msg_id: newBuyerMsgId }).eq("id", payment.transaction_id);
+        }
       }
       
       // Notify seller about new paid order
