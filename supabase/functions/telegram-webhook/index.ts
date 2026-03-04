@@ -3555,6 +3555,14 @@ async function handleItemSent(chatId: number, msgId: number, txId: string, cbId:
     ? `@${tx.buyer.telegram_username}`
     : `ID: ${tx.buyer?.telegram_id || "Unknown"}`;
 
+  // Determine currency display
+  const txCurrency = tx.currency || "TON";
+  const isMMK = txCurrency === "MMK";
+  const amountDisplay = isMMK 
+    ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK` 
+    : `${Number(tx.amount_ton).toFixed(2)} TON`;
+  const currencyIcon = isMMK ? "💵" : "💎";
+
   await editText(
     chatId,
     msgId,
@@ -3568,7 +3576,7 @@ async function handleItemSent(chatId: number, msgId: number, txId: string, cbId:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *${tx.amount_ton} TON*
+${currencyIcon} *${amountDisplay}*
 👤 *ဝယ်သူ:* ${buyerUsername}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -3594,7 +3602,7 @@ async function handleItemSent(chatId: number, msgId: number, txId: string, cbId:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *${tx.amount_ton} TON*
+${currencyIcon} *${amountDisplay}*
 🏪 *ရောင်းသူ:* ${sellerUsername}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
