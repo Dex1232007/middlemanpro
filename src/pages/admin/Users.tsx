@@ -68,6 +68,7 @@ export default function AdminUsers() {
   const [selectedUser, setSelectedUser] = useState<ExtendedProfile | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [dialogAction, setDialogAction] = useState<'add' | 'deduct'>('add');
+  const [dialogCurrency, setDialogCurrency] = useState<'TON' | 'MMK'>('TON');
   const [amount, setAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   
@@ -102,9 +103,10 @@ export default function AdminUsers() {
     }
   };
 
-  const openBalanceDialog = (user: ExtendedProfile, action: 'add' | 'deduct') => {
+  const openBalanceDialog = (user: ExtendedProfile, action: 'add' | 'deduct', currency: 'TON' | 'MMK' = 'TON') => {
     setSelectedUser(user);
     setDialogAction(action);
+    setDialogCurrency(currency);
     setAmount('');
     setIsDialogOpen(true);
   };
@@ -208,7 +210,10 @@ export default function AdminUsers() {
 
     setIsProcessing(true);
     try {
-      const currentBalance = Number(selectedUser.balance);
+      const balanceField = dialogCurrency === 'MMK' ? 'balance_mmk' : 'balance';
+      const currentBalance = dialogCurrency === 'MMK' 
+        ? Number((selectedUser as any).balance_mmk || 0) 
+        : Number(selectedUser.balance);
       let newBalance: number;
 
       if (dialogAction === 'add') {
@@ -224,15 +229,17 @@ export default function AdminUsers() {
 
       const { error } = await supabase
         .from('profiles')
-        .update({ balance: newBalance })
+        .update({ [balanceField]: newBalance })
         .eq('id', selectedUser.id);
 
       if (error) throw error;
 
+      const unit = dialogCurrency === 'MMK' ? 'MMK' : 'TON';
+      const decimals = dialogCurrency === 'MMK' ? 0 : 4;
       toast.success(
         dialogAction === 'add'
-          ? `${amountNum.toFixed(4)} TON ထည့်ပြီးပါပြီ`
-          : `${amountNum.toFixed(4)} TON နုတ်ပြီးပါပြီ`
+          ? `${amountNum.toFixed(decimals)} ${unit} ထည့်ပြီးပါပြီ`
+          : `${amountNum.toFixed(decimals)} ${unit} နုတ်ပြီးပါပြီ`
       );
 
       setIsDialogOpen(false);
@@ -316,6 +323,7 @@ export default function AdminUsers() {
                     <TableHead>Rating</TableHead>
                     <TableHead>Wallet လိပ်စာ</TableHead>
                     <TableHead>လက်ကျန် (TON)</TableHead>
+                    <TableHead>လက်ကျန် (MMK)</TableHead>
                     <TableHead>စာရင်းသွင်းသည့်ရက်</TableHead>
                     <TableHead className="text-right">လုပ်ဆောင်မှု</TableHead>
                   </TableRow>
@@ -323,7 +331,7 @@ export default function AdminUsers() {
                 <TableBody>
                   {filteredUsers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center">
+                      <TableCell colSpan={8} className="h-24 text-center">
                         အသုံးပြုသူ မရှိပါ
                       </TableCell>
                     </TableRow>
@@ -385,27 +393,54 @@ export default function AdminUsers() {
                           </span>
                         </TableCell>
                         <TableCell>
+                          <span className="font-mono font-medium">
+                            {Number((user as any).balance_mmk || 0).toLocaleString()}
+                          </span>
+                        </TableCell>
+                        <TableCell>
                           {format(new Date(user.created_at), 'yyyy-MM-dd')}
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
+                          <div className="flex flex-wrap justify-end gap-1">
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-green-600 hover:bg-green-50"
-                              onClick={() => openBalanceDialog(user, 'add')}
+                              onClick={() => openBalanceDialog(user, 'add', 'TON')}
+                              title="TON ထည့်"
                             >
-                              <Plus className="mr-1 h-4 w-4" />
-                              ထည့်
+                              <Plus className="mr-1 h-3 w-3" />
+                              TON
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-red-600 hover:bg-red-50"
-                              onClick={() => openBalanceDialog(user, 'deduct')}
+                              onClick={() => openBalanceDialog(user, 'deduct', 'TON')}
+                              title="TON နုတ်"
                             >
-                              <Minus className="mr-1 h-4 w-4" />
-                              နုတ်
+                              <Minus className="mr-1 h-3 w-3" />
+                              TON
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-green-600 hover:bg-green-50"
+                              onClick={() => openBalanceDialog(user, 'add', 'MMK')}
+                              title="MMK ထည့်"
+                            >
+                              <Plus className="mr-1 h-3 w-3" />
+                              MMK
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-600 hover:bg-red-50"
+                              onClick={() => openBalanceDialog(user, 'deduct', 'MMK')}
+                              title="MMK နုတ်"
+                            >
+                              <Minus className="mr-1 h-3 w-3" />
+                              MMK
                             </Button>
                             <Button
                               size="sm"
@@ -441,7 +476,7 @@ export default function AdminUsers() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {dialogAction === 'add' ? 'လက်ကျန်ငွေ ထည့်မည်' : 'လက်ကျန်ငွေ နုတ်မည်'}
+              {dialogCurrency} {dialogAction === 'add' ? 'လက်ကျန်ငွေ ထည့်မည်' : 'လက်ကျန်ငွေ နုတ်မည်'}
             </DialogTitle>
             <DialogDescription asChild>
               {selectedUser && (
@@ -452,8 +487,13 @@ export default function AdminUsers() {
                       <strong>@{selectedUser.telegram_username || 'unknown'}</strong>
                     </div>
                     <div className="flex justify-between">
-                      <span>လက်ရှိ လက်ကျန်:</span>
-                      <strong>{Number(selectedUser.balance).toFixed(4)} TON</strong>
+                      <span>လက်ရှိ {dialogCurrency} လက်ကျန်:</span>
+                      <strong>
+                        {dialogCurrency === 'MMK' 
+                          ? `${Number((selectedUser as any).balance_mmk || 0).toLocaleString()} MMK`
+                          : `${Number(selectedUser.balance).toFixed(4)} TON`
+                        }
+                      </strong>
                     </div>
                   </div>
                 </div>
@@ -463,13 +503,13 @@ export default function AdminUsers() {
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="amount">ပမာဏ (TON)</Label>
+              <Label htmlFor="amount">ပမာဏ ({dialogCurrency})</Label>
               <Input
                 id="amount"
                 type="number"
-                step="0.0001"
+                step={dialogCurrency === 'MMK' ? '1' : '0.0001'}
                 min="0"
-                placeholder="0.1"
+                placeholder={dialogCurrency === 'MMK' ? '1000' : '0.1'}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
