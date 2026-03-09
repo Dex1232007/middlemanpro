@@ -71,7 +71,7 @@ async function sendTelegramPhoto(chatId: number, photoUrl: string, caption: stri
 }
 
 interface NotifyRequest {
-  type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx' | 'admin_new_deposit' | 'admin_transaction_completed' | 'mmk_deposit_approved' | 'mmk_deposit_rejected' | 'admin_new_mmk_withdrawal' | 'mmk_withdrawal_approved' | 'mmk_withdrawal_rejected' | 'admin_new_mmk_deposit' | 'admin_new_mmk_payment' | 'transaction_admin_payment_confirmed' | 'transaction_admin_completed' | 'transaction_admin_cancelled'
+  type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx' | 'admin_new_deposit' | 'admin_transaction_completed' | 'mmk_deposit_approved' | 'mmk_deposit_rejected' | 'admin_new_mmk_withdrawal' | 'mmk_withdrawal_approved' | 'mmk_withdrawal_rejected' | 'admin_new_mmk_deposit' | 'admin_new_mmk_payment' | 'transaction_admin_payment_confirmed' | 'transaction_admin_completed' | 'transaction_admin_cancelled' | 'dispute_admin_message'
   profile_id?: string
   telegram_id?: number
   amount?: number
@@ -732,6 +732,30 @@ ${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${bod
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
+      }
+
+      case 'dispute_admin_message': {
+        const adminChatMsg = `👨‍💼 *Admin မှ Dispute Chat*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${body.product_title || 'ပစ္စည်း'}*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💬 ${body.custom_message || (body as any).message || ''}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+_Admin မှ ပို့သော message ဖြစ်ပါသည်_`
+        const dchatKb = body.transaction_id ? {
+          inline_keyboard: [
+            [{ text: '💬 Chat ဖွင့်ပြီး ပြန်ရေးမည်', callback_data: `dchat:open:${body.transaction_id}` }],
+            [{ text: '🏠 ပင်မစာမျက်နှာ', callback_data: 'm:home' }],
+          ]
+        } : undefined
+        await sendTelegramMessage(telegramId, adminChatMsg, 'Markdown', dchatKb)
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
       }
 
       case 'custom':

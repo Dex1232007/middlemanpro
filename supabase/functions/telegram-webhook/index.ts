@@ -3952,6 +3952,13 @@ async function handleDispute(chatId: number, msgId: number, txId: string, cbId: 
     ? `@${tx.buyer.telegram_username}`
     : `ID: ${tx.buyer?.telegram_id || "Unknown"}`;
 
+  const disputeChatBtn = (txId: string) => ({
+    inline_keyboard: [
+      [{ text: "💬 Dispute Chat ဖွင့်မည်", callback_data: `dchat:open:${txId}` }],
+      [{ text: "🏠 ပင်မစာမျက်နှာ", callback_data: "m:home" }],
+    ],
+  });
+
   // Update buyer's message
   await editText(
     chatId,
@@ -3972,10 +3979,10 @@ async function handleDispute(chatId: number, msgId: number, txId: string, cbId: 
 📋 *အခြေအနေ:* အငြင်းပွားမှု စိစစ်နေပါသည်
 
 ⏳ Admin မှ စစ်ဆေးပြီး နှစ်ဘက်စလုံးသို့ ဆက်သွယ်ပါမည်
-💬 လိုအပ်ပါက Admin မှ သင့်ထံ မေးမြန်းနိုင်ပါသည်
+💬 အောက်က Chat ခလုတ်ကို နှိပ်ပြီး ရောင်းသူနဲ့ စကားပြောနိုင်ပါသည်
 
 🔒 ငွေကို Admin က ထိန်းသိမ်းထားပါသည်`,
-    backBtn(),
+    disputeChatBtn(txId),
   );
 
   // Notify seller about the dispute
@@ -3999,10 +4006,10 @@ async function handleDispute(chatId: number, msgId: number, txId: string, cbId: 
 📋 *အခြေအနေ:* ဝယ်သူမှ အငြင်းပွားမှု တင်သွင်းထားပါသည်
 
 ⏳ Admin မှ စစ်ဆေးပြီး နှစ်ဘက်စလုံးသို့ ဆက်သွယ်ပါမည်
-💬 လိုအပ်ပါက Admin မှ သင့်ထံ မေးမြန်းနိုင်ပါသည်
+💬 အောက်က Chat ခလုတ်ကို နှိပ်ပြီး ဝယ်သူနဲ့ စကားပြောနိုင်ပါသည်
 
 🔒 ငွေကို Admin က ထိန်းသိမ်းထားပါသည်`,
-      backBtn(),
+      disputeChatBtn(txId),
     );
   }
 
@@ -5164,6 +5171,77 @@ Bot ကောင်းစွာအလုပ်လုပ်နေပါသည်!
     return;
   }
 
+  // Dispute chat message forwarding
+  if (state?.action === "dispute_chat" && state.data?.txId) {
+    const txId = String(state.data.txId);
+    const role = String(state.data.role); // "buyer" or "seller"
+    const otherTelegramId = Number(state.data.otherTelegramId);
+    const myProfileId = String(state.data.myProfileId);
+
+    // Verify transaction is still disputed
+    const { data: tx } = await supabase
+      .from("transactions")
+      .select("status")
+      .eq("id", txId)
+      .single();
+
+    if (!tx || tx.status !== "disputed") {
+      await deleteUserState(chatId);
+      await editText(chatId, state.msgId!, "❌ ဤ dispute ပြီးဆုံးသွားပါပြီ", backBtn());
+      await deleteMsg(chatId, inMsgId);
+      return;
+    }
+
+    // Save message to dispute_messages table
+    await supabase.from("dispute_messages").insert({
+      transaction_id: txId,
+      sender_id: myProfileId,
+      sender_role: role,
+      message_text: text.substring(0, 2000),
+    });
+
+    // Forward message to other party
+    if (otherTelegramId) {
+      const roleLabel = role === "buyer" ? "🛒 ဝယ်သူ" : "🏪 ရောင်းသူ";
+      await sendMessage(
+        otherTelegramId,
+        `💬 *Dispute Chat - ${roleLabel}မှ*
+
+━━━━━━━━━━━━━━━━━━━━
+${text.substring(0, 2000)}
+━━━━━━━━━━━━━━━━━━━━
+
+_ပြန်ရေးရန် Dispute Chat ဖွင့်ပါ_`,
+        {
+          inline_keyboard: [
+            [{ text: "💬 Chat ဖွင့်ပြီး ပြန်ရေးမည်", callback_data: `dchat:open:${txId}` }],
+          ],
+        },
+      );
+    }
+
+    // Confirm to sender
+    if (state.msgId) {
+      await editText(
+        chatId,
+        state.msgId,
+        `💬 *Dispute Chat*
+
+✅ Message ပို့ပြီး!
+
+✏️ နောက်ထပ် message ရိုက်ထည့်ပါ
+⚠️ ထွက်ရန် အောက်က ခလုတ်ကို နှိပ်ပါ`,
+        {
+          inline_keyboard: [
+            [{ text: "❌ Chat ပိတ်မည်", callback_data: `dchat:exit:${txId}` }],
+          ],
+        },
+      );
+    }
+    await deleteMsg(chatId, inMsgId);
+    return;
+  }
+
   await showHome(chatId, undefined, username);
 }
 
@@ -5597,6 +5675,83 @@ async function handleCallback(cb: {
       telegramId,
     );
     return;
+  }
+
+  // Dispute chat callbacks: dchat:open|exit:<txId>
+  if (type === "dchat") {
+    if (action === "open") {
+      await answerCb(cb.id);
+      // Verify user is buyer or seller of this disputed transaction
+      const { data: tx } = await supabase
+        .from("transactions")
+        .select("*, products(title), buyer:profiles!transactions_buyer_id_fkey(id, telegram_id, telegram_username), seller:profiles!transactions_seller_id_fkey(id, telegram_id, telegram_username)")
+        .eq("id", id)
+        .eq("status", "disputed")
+        .single();
+
+      if (!tx) {
+        await editText(chatId, msgId, "❌ ဤ dispute ရှာမတွေ့ပါ သို့မဟုတ် ပြီးဆုံးသွားပါပြီ", backBtn());
+        return;
+      }
+
+      const isBuyer = tx.buyer?.telegram_id === telegramId;
+      const isSeller = tx.seller?.telegram_id === telegramId;
+      if (!isBuyer && !isSeller) {
+        await editText(chatId, msgId, "❌ သင်သည် ဤရောင်းဝယ်မှု၏ ဝယ်သူ/ရောင်းသူ မဟုတ်ပါ", backBtn());
+        return;
+      }
+
+      const role = isBuyer ? "buyer" : "seller";
+      const otherParty = isBuyer ? tx.seller?.telegram_username : tx.buyer?.telegram_username;
+
+      await setUserState(chatId, {
+        action: "dispute_chat",
+        msgId,
+        data: { txId: id, role, otherTelegramId: isBuyer ? tx.seller?.telegram_id : tx.buyer?.telegram_id, otherProfileId: isBuyer ? tx.seller?.id : tx.buyer?.id, myProfileId: isBuyer ? tx.buyer?.id : tx.seller?.id },
+      });
+
+      await editText(
+        chatId,
+        msgId,
+        `💬 *Dispute Chat*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+👤 *${isBuyer ? "ရောင်းသူ" : "ဝယ်သူ"}:* @${otherParty || "Unknown"}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✏️ သင့် message ကို ရိုက်ထည့်ပါ။
+📨 အဖက်သားထံ ဘော့မှတဆင့် ပေးပို့ပေးပါမည်။
+🔍 Admin မှလည်း Chat မှတ်တမ်း ကြည့်ရှုနိုင်ပါသည်။
+
+⚠️ ထွက်ရန် အောက်က ခလုတ်ကို နှိပ်ပါ`,
+        {
+          inline_keyboard: [
+            [{ text: "❌ Chat ပိတ်မည်", callback_data: `dchat:exit:${id}` }],
+          ],
+        },
+      );
+      return;
+    }
+
+    if (action === "exit") {
+      await answerCb(cb.id, "💬 Chat ပိတ်ပြီး");
+      await deleteUserState(chatId);
+      await editText(
+        chatId,
+        msgId,
+        `✅ *Dispute Chat ပိတ်ပြီး*
+
+ပင်မစာမျက်နှာသို့ ပြန်သွားနိုင်ပါသည်`,
+        {
+          inline_keyboard: [
+            [{ text: "💬 Chat ပြန်ဖွင့်မည်", callback_data: `dchat:open:${id}` }],
+            [{ text: "🏠 ပင်မစာမျက်နှာ", callback_data: "m:home" }],
+          ],
+        },
+      );
+      return;
+    }
   }
 
   // Buy with balance callback: buy:bal:<txId>
