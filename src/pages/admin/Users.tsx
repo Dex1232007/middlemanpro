@@ -81,14 +81,8 @@ export default function AdminUsers() {
   const [blockReason, setBlockReason] = useState('');
   const [isBlocking, setIsBlocking] = useState(false);
 
-  // Profile detail dialog states
+  // Profile detail dialog state
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
-  const [profileRatings, setProfileRatings] = useState<UserRating[]>([]);
-  const [profileTransactions, setProfileTransactions] = useState<any[]>([]);
-  const [profileDeposits, setProfileDeposits] = useState<any[]>([]);
-  const [profileWithdrawals, setProfileWithdrawals] = useState<any[]>([]);
-  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
-  const [profileTab, setProfileTab] = useState('overview');
 
   useEffect(() => {
     fetchUsers();
