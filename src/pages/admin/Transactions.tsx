@@ -291,7 +291,9 @@ export default function AdminTransactions() {
       if (selectedTx.seller_id) {
         await supabase.functions.invoke('notify-user', {
           body: {
-            type: actionType === 'confirm' ? 'transaction_admin_completed' : 'transaction_admin_cancelled',
+            type: actionType === 'confirm'
+              ? (newStatus === 'payment_received' ? 'transaction_admin_payment_confirmed' : 'transaction_admin_completed')
+              : 'transaction_admin_cancelled',
             profile_id: selectedTx.seller_id,
             amount: selectedTx.currency === 'MMK' ? selectedTx.amount_mmk : selectedTx.amount_ton,
             currency: selectedTx.currency,
@@ -310,7 +312,9 @@ export default function AdminTransactions() {
       if (selectedTx.buyer_id) {
         await supabase.functions.invoke('notify-user', {
           body: {
-            type: actionType === 'confirm' ? 'transaction_admin_completed' : 'transaction_admin_cancelled',
+            type: actionType === 'confirm'
+              ? (newStatus === 'payment_received' ? 'transaction_admin_payment_confirmed' : 'transaction_admin_completed')
+              : 'transaction_admin_cancelled',
             profile_id: selectedTx.buyer_id,
             amount: selectedTx.currency === 'MMK' ? selectedTx.amount_mmk : selectedTx.amount_ton,
             currency: selectedTx.currency,
