@@ -350,7 +350,7 @@ export default function AdminUsers() {
                     </TableRow>
                   ) : (
                     filteredUsers.map((user) => (
-                      <TableRow key={user.id} className={user.is_blocked ? 'bg-destructive/5' : ''}>
+                      <TableRow key={user.id} className={`cursor-pointer ${user.is_blocked ? 'bg-destructive/5' : ''}`} onClick={() => openProfileDialog(user)}>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <MessageCircle className="h-4 w-4 text-primary" />
