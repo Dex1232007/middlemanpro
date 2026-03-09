@@ -573,7 +573,7 @@ export default function AdminTransactions() {
                           <TableCell>
                             {paymentScreenshots[tx.id] ? (
                               <button
-                                onClick={() => setScreenshotPreview(paymentScreenshots[tx.id])}
+                                onClick={(e) => { e.stopPropagation(); setScreenshotPreview(paymentScreenshots[tx.id]); }}
                                 title="Screenshot ကြည့်ရန်"
                               >
                                 <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] px-1.5 cursor-pointer hover:bg-primary/20 transition-colors">
