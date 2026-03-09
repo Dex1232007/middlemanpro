@@ -43,7 +43,7 @@ import { TransactionStatusBadge } from '@/components/admin/StatusBadge';
 
 type StatusFilter = 'all' | 'active' | 'blocked';
 
-interface UserRating {
+export interface UserRating {
   id: string;
   rating: number;
   comment: string | null;
@@ -55,12 +55,16 @@ interface UserRating {
   };
 }
 
-interface ExtendedProfile extends Profile {
+export interface ExtendedProfile extends Profile {
   is_blocked?: boolean;
   blocked_at?: string | null;
   blocked_reason?: string | null;
   avg_rating?: number | null;
   total_ratings?: number | null;
+  balance_mmk?: number;
+  language?: string;
+  referral_code?: string | null;
+  total_referral_earnings?: number | null;
 }
 
 export default function AdminUsers() {

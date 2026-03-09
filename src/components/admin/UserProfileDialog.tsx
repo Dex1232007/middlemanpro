@@ -373,21 +373,21 @@ function EmptyState({ text }: { text: string }) {
 }
 
 function DepositStatusBadge({ status }: { status: string }) {
-  const config: Record<string, { variant: 'default' | 'destructive' | 'secondary'; label: string }> = {
-    confirmed: { variant: 'default', label: '✅ အတည်ပြုပြီး' },
-    rejected: { variant: 'destructive', label: '❌ ငြင်းပယ်' },
-    expired: { variant: 'secondary', label: '⏰ သက်တမ်းကုန်' },
+  const map: Record<string, { v: 'default' | 'destructive' | 'secondary'; l: string }> = {
+    confirmed: { v: 'default', l: '✅ အတည်ပြုပြီး' },
+    rejected: { v: 'destructive', l: '❌ ငြင်းပယ်' },
+    expired: { v: 'secondary', l: '⏰ သက်တမ်းကုန်' },
   };
-  const { variant, label } = config[status] || { variant: 'secondary' as const, label: '⏳ စောင့်နေ' };
-  return <Badge variant={variant} className="text-[10px]">{label}</Badge>;
+  const { v, l } = map[status] || { v: 'secondary' as const, l: '⏳ စောင့်နေ' };
+  return <Badge variant={v} className="text-[10px]">{l}</Badge>;
 }
 
 function WithdrawalStatusBadge({ status }: { status: string }) {
-  const config: Record<string, { variant: 'default' | 'destructive' | 'secondary'; label: string }> = {
-    completed: { variant: 'default', label: '✅ ပြီးစီး' },
-    approved: { variant: 'default', label: '👍 Approved' },
-    rejected: { variant: 'destructive', label: '❌ ငြင်းပယ်' },
+  const map: Record<string, { v: 'default' | 'destructive' | 'secondary'; l: string }> = {
+    completed: { v: 'default', l: '✅ ပြီးစီး' },
+    approved: { v: 'default', l: '👍 Approved' },
+    rejected: { v: 'destructive', l: '❌ ငြင်းပယ်' },
   };
-  const { variant, label } = config[status] || { variant: 'secondary' as const, label: '⏳ စောင့်နေ' };
-  return <Badge variant={variant} className="text-[10px]">{label}</Badge>;
+  const { v, l } = map[status] || { v: 'secondary' as const, l: '⏳ စောင့်နေ' };
+  return <Badge variant={v} className="text-[10px]">{l}</Badge>;
 }
