@@ -141,6 +141,7 @@ export default function AdminDeposits() {
   const [selectedDeposit, setSelectedDeposit] = useState<Deposit | null>(null);
   const [approvalNotes, setApprovalNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDeposits();
