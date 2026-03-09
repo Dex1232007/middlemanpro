@@ -3952,6 +3952,13 @@ async function handleDispute(chatId: number, msgId: number, txId: string, cbId: 
     ? `@${tx.buyer.telegram_username}`
     : `ID: ${tx.buyer?.telegram_id || "Unknown"}`;
 
+  const disputeChatBtn = (txId: string) => ({
+    inline_keyboard: [
+      [{ text: "💬 Dispute Chat ဖွင့်မည်", callback_data: `dchat:open:${txId}` }],
+      [{ text: "🏠 ပင်မစာမျက်နှာ", callback_data: "m:home" }],
+    ],
+  });
+
   // Update buyer's message
   await editText(
     chatId,
@@ -3972,10 +3979,10 @@ async function handleDispute(chatId: number, msgId: number, txId: string, cbId: 
 📋 *အခြေအနေ:* အငြင်းပွားမှု စိစစ်နေပါသည်
 
 ⏳ Admin မှ စစ်ဆေးပြီး နှစ်ဘက်စလုံးသို့ ဆက်သွယ်ပါမည်
-💬 လိုအပ်ပါက Admin မှ သင့်ထံ မေးမြန်းနိုင်ပါသည်
+💬 အောက်က Chat ခလုတ်ကို နှိပ်ပြီး ရောင်းသူနဲ့ စကားပြောနိုင်ပါသည်
 
 🔒 ငွေကို Admin က ထိန်းသိမ်းထားပါသည်`,
-    backBtn(),
+    disputeChatBtn(txId),
   );
 
   // Notify seller about the dispute
@@ -3999,10 +4006,10 @@ async function handleDispute(chatId: number, msgId: number, txId: string, cbId: 
 📋 *အခြေအနေ:* ဝယ်သူမှ အငြင်းပွားမှု တင်သွင်းထားပါသည်
 
 ⏳ Admin မှ စစ်ဆေးပြီး နှစ်ဘက်စလုံးသို့ ဆက်သွယ်ပါမည်
-💬 လိုအပ်ပါက Admin မှ သင့်ထံ မေးမြန်းနိုင်ပါသည်
+💬 အောက်က Chat ခလုတ်ကို နှိပ်ပြီး ဝယ်သူနဲ့ စကားပြောနိုင်ပါသည်
 
 🔒 ငွေကို Admin က ထိန်းသိမ်းထားပါသည်`,
-      backBtn(),
+      disputeChatBtn(txId),
     );
   }
 
