@@ -102,6 +102,10 @@ export default function AdminDisputes() {
   const [activeTab, setActiveTab] = useState('pending');
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<DisputeMessage[]>([]);
+  const [adminMessage, setAdminMessage] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchDisputes();
