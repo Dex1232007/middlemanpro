@@ -2127,7 +2127,12 @@ async function showOrders(chatId: number, msgId: number, username?: string) {
   if (sellerTxs?.length) {
     text += `━━━ 📤 *ရောင်းနေသည်* ━━━\n\n`;
     for (const tx of sellerTxs) {
-      text += `📦 *${tx.products?.title}*\n💵 ${tx.amount_ton} TON | ${statusText[tx.status]}\n\n`;
+      const isMMK = tx.currency === "MMK";
+      const amountStr = isMMK
+        ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK`
+        : `${Number(tx.amount_ton).toFixed(2)} TON`;
+      const icon = isMMK ? "💵" : "💎";
+      text += `📦 *${tx.products?.title}*\n${icon} ${amountStr} | ${statusText[tx.status]}\n\n`;
       if (tx.status === "payment_received") {
         btns.push([
           { text: `📦 ${tx.products?.title?.substring(0, 12)} - ပို့ပြီး`, callback_data: `a:sent:${tx.id}` },
@@ -2139,10 +2144,20 @@ async function showOrders(chatId: number, msgId: number, username?: string) {
   if (buyerTxs?.length) {
     text += `━━━ 📥 *ဝယ်နေသည်* ━━━\n\n`;
     for (const tx of buyerTxs) {
-      text += `📦 *${tx.products?.title}*\n💵 ${tx.amount_ton} TON | ${statusText[tx.status]}\n\n`;
+      const isMMK = tx.currency === "MMK";
+      const amountStr = isMMK
+        ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK`
+        : `${Number(tx.amount_ton).toFixed(2)} TON`;
+      const icon = isMMK ? "💵" : "💎";
+      text += `📦 *${tx.products?.title}*\n${icon} ${amountStr} | ${statusText[tx.status]}\n\n`;
       if (tx.status === "item_sent") {
         btns.push([
           { text: `✅ ${tx.products?.title?.substring(0, 12)} - ရရှိပြီး`, callback_data: `a:recv:${tx.id}` },
+        ]);
+      }
+      if (tx.status === "disputed") {
+        btns.push([
+          { text: `⚠️ ${tx.products?.title?.substring(0, 12)} - အငြင်းပွားဆဲ`, callback_data: `m:ord` },
         ]);
       }
     }
