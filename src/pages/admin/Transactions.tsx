@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { Search, RefreshCw, ExternalLink, Download, Calendar, Filter, Star, Eye, Clock, CheckCircle, Package, ShieldAlert, XCircle, CreditCard, Copy, User, ArrowRight } from 'lucide-react';
+import { Search, RefreshCw, ExternalLink, Download, Calendar, Filter, Star, Eye, Clock, CheckCircle, Package, ShieldAlert, XCircle, CreditCard, Copy, User, ArrowRight, Loader2 } from 'lucide-react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { TransactionStatusBadge } from '@/components/admin/StatusBadge';
 import { RatingDisplay } from '@/components/admin/RatingDisplay';
@@ -42,7 +42,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import type { Transaction, TransactionStatus } from '@/types/database';
@@ -86,6 +89,11 @@ export default function AdminTransactions() {
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [paymentScreenshots, setPaymentScreenshots] = useState<Record<string, string>>({});
   const [selectedTx, setSelectedTx] = useState<TransactionWithRatings | null>(null);
+
+  // Action dialog states
+  const [actionType, setActionType] = useState<'confirm' | 'reject' | null>(null);
+  const [actionReason, setActionReason] = useState('');
+  const [isActionProcessing, setIsActionProcessing] = useState(false);
 
   // Store seller/buyer info for display
   const [profiles, setProfiles] = useState<Record<string, { telegram_username: string | null }>>({});
@@ -229,6 +237,105 @@ export default function AdminTransactions() {
   };
 
   const hasActiveFilters = searchTerm || statusFilter !== 'all' || dateFrom || dateTo || minAmount || maxAmount || ratingFilter !== 'all';
+
+  const handleTransactionAction = async () => {
+    if (!selectedTx || !actionType) return;
+    
+    setIsActionProcessing(true);
+    try {
+      const newStatus = actionType === 'confirm' ? 'completed' : 'cancelled';
+      
+      // Update transaction status
+      const { error: updateError } = await supabase
+        .from('transactions')
+        .update({ 
+          status: newStatus,
+          ...(actionType === 'confirm' ? { confirmed_at: new Date().toISOString() } : {}),
+        })
+        .eq('id', selectedTx.id);
+      
+      if (updateError) throw updateError;
+
+      // If confirming (completed), add seller_receives_ton to seller balance
+      if (actionType === 'confirm' && selectedTx.seller_id) {
+        const { data: sellerProfile } = await supabase
+          .from('profiles')
+          .select('balance, balance_mmk')
+          .eq('id', selectedTx.seller_id)
+          .single();
+        
+        if (sellerProfile) {
+          if (selectedTx.currency === 'MMK') {
+            await supabase.from('profiles').update({
+              balance_mmk: Number(sellerProfile.balance_mmk) + Number(selectedTx.seller_receives_ton)
+            }).eq('id', selectedTx.seller_id);
+          } else {
+            await supabase.from('profiles').update({
+              balance: Number(sellerProfile.balance) + Number(selectedTx.seller_receives_ton)
+            }).eq('id', selectedTx.seller_id);
+          }
+        }
+      }
+
+      // Notify both seller and buyer via Telegram
+      const sellerUsername = selectedTx.seller_id ? profiles[selectedTx.seller_id]?.telegram_username : null;
+      const buyerUsername = selectedTx.buyer_id ? profiles[selectedTx.buyer_id]?.telegram_username : null;
+
+      // Notify seller
+      if (selectedTx.seller_id) {
+        await supabase.functions.invoke('notify-user', {
+          body: {
+            type: actionType === 'confirm' ? 'transaction_admin_completed' : 'transaction_admin_cancelled',
+            profile_id: selectedTx.seller_id,
+            amount: selectedTx.currency === 'MMK' ? selectedTx.amount_mmk : selectedTx.amount_ton,
+            currency: selectedTx.currency,
+            admin_notes: actionReason,
+            product_title: selectedTx.unique_link,
+            buyer_username: buyerUsername,
+            seller_username: sellerUsername,
+            seller_receives: Number(selectedTx.seller_receives_ton),
+            role: 'seller',
+          }
+        });
+      }
+
+      // Notify buyer
+      if (selectedTx.buyer_id) {
+        await supabase.functions.invoke('notify-user', {
+          body: {
+            type: actionType === 'confirm' ? 'transaction_admin_completed' : 'transaction_admin_cancelled',
+            profile_id: selectedTx.buyer_id,
+            amount: selectedTx.currency === 'MMK' ? selectedTx.amount_mmk : selectedTx.amount_ton,
+            currency: selectedTx.currency,
+            admin_notes: actionReason,
+            product_title: selectedTx.unique_link,
+            buyer_username: buyerUsername,
+            seller_username: sellerUsername,
+            role: 'buyer',
+          }
+        });
+      }
+
+      toast({
+        title: actionType === 'confirm' ? '✅ အတည်ပြုပြီးပါပြီ' : '❌ ပယ်ဖျက်ပြီးပါပြီ',
+        description: `Transaction ကို ${actionType === 'confirm' ? 'completed' : 'cancelled'} သို့ပြောင်းပြီးပါပြီ`,
+      });
+      
+      setActionType(null);
+      setActionReason('');
+      setSelectedTx(null);
+      fetchTransactions();
+    } catch (error) {
+      console.error('Error updating transaction:', error);
+      toast({
+        title: 'Error',
+        description: 'Transaction ပြင်ဆင်မှု မအောင်မြင်ပါ',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsActionProcessing(false);
+    }
+  };
 
   // Get amount label based on currency
   const getAmountLabel = () => {
@@ -847,6 +954,31 @@ export default function AdminTransactions() {
                     </div>
                   )}
                 </div>
+
+                {/* Action Buttons - show for active transactions */}
+                {['pending_payment', 'payment_received', 'item_sent', 'disputed'].includes(selectedTx.status) && (
+                  <>
+                    <Separator />
+                    <div className="flex gap-2">
+                      <Button
+                        className="flex-1"
+                        variant="default"
+                        onClick={() => setActionType('confirm')}
+                      >
+                        <CheckCircle className="mr-2 h-4 w-4" />
+                        အတည်ပြု (Complete)
+                      </Button>
+                      <Button
+                        className="flex-1"
+                        variant="destructive"
+                        onClick={() => setActionType('reject')}
+                      >
+                        <XCircle className="mr-2 h-4 w-4" />
+                        ပယ်ဖျက် (Cancel)
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             );
           })()}
@@ -876,6 +1008,66 @@ export default function AdminTransactions() {
               </a>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Action Reason Dialog */}
+      <Dialog open={!!actionType} onOpenChange={(open) => { if (!open) { setActionType(null); setActionReason(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {actionType === 'confirm' ? '✅ Transaction အတည်ပြုမည်' : '❌ Transaction ပယ်ဖျက်မည်'}
+            </DialogTitle>
+            <DialogDescription>
+              {actionType === 'confirm' 
+                ? 'Transaction ကို completed အဖြစ် ပြောင်းပြီး ရောင်းသူ balance ထဲသို့ ငွေထည့်ပေးမည်။'
+                : 'Transaction ကို cancelled အဖြစ် ပြောင်းမည်။'}
+              {' '}အကြောင်းပြချက်ကို user ဆီ Telegram မှတဆင့် ပို့ပေးပါမည်။
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="actionReason">အကြောင်းပြချက် / မှတ်ချက်</Label>
+              <Textarea
+                id="actionReason"
+                placeholder={actionType === 'confirm' 
+                  ? 'ဥပမာ: စစ်ဆေးပြီး မှန်ကန်ပါသည်၊ ပစ္စည်းလက်ခံပြီး...'
+                  : 'ဥပမာ: ငွေမမှန်ကန်ပါ၊ လိမ်လည်မှု သံသယ...'}
+                value={actionReason}
+                onChange={(e) => setActionReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+            {selectedTx && (
+              <div className="rounded-lg bg-muted/50 p-3 space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">ပမာဏ</span>
+                  <span className="font-mono font-bold">
+                    {selectedTx.currency === 'MMK'
+                      ? `${Number(selectedTx.amount_mmk || 0).toLocaleString()} Ks`
+                      : `${Number(selectedTx.amount_ton).toFixed(4)} TON`}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Status</span>
+                  <TransactionStatusBadge status={selectedTx.status} />
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setActionType(null); setActionReason(''); }}>
+              ပယ်ဖျက်
+            </Button>
+            <Button
+              variant={actionType === 'confirm' ? 'default' : 'destructive'}
+              onClick={handleTransactionAction}
+              disabled={isActionProcessing || !actionReason.trim()}
+            >
+              {isActionProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {actionType === 'confirm' ? 'အတည်ပြုမည်' : 'ပယ်ဖျက်မည်'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AdminLayout>

@@ -54,7 +54,7 @@ async function sendTelegramPhoto(chatId: number, photoUrl: string, caption: stri
 }
 
 interface NotifyRequest {
-  type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx' | 'admin_new_deposit' | 'admin_transaction_completed' | 'mmk_deposit_approved' | 'mmk_deposit_rejected' | 'admin_new_mmk_withdrawal' | 'mmk_withdrawal_approved' | 'mmk_withdrawal_rejected' | 'admin_new_mmk_deposit' | 'admin_new_mmk_payment'
+  type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx' | 'admin_new_deposit' | 'admin_transaction_completed' | 'mmk_deposit_approved' | 'mmk_deposit_rejected' | 'admin_new_mmk_withdrawal' | 'mmk_withdrawal_approved' | 'mmk_withdrawal_rejected' | 'admin_new_mmk_deposit' | 'admin_new_mmk_payment' | 'transaction_admin_completed' | 'transaction_admin_cancelled'
   profile_id?: string
   telegram_id?: number
   amount?: number
@@ -82,6 +82,8 @@ interface NotifyRequest {
   payment_id?: string
   transaction_id?: string
   screenshot_url?: string
+  seller_receives?: number
+  role?: 'seller' | 'buyer'
 }
 
 async function verifyAdminAuth(req: Request): Promise<{ authorized: boolean; error?: string }> {
@@ -545,6 +547,53 @@ ${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${bod
    _(ငွေပြန်ထည့်ပေးပြီးပါပြီ)_
 
 ⚠️ ပြန်လည်ကြိုးစားလိုပါက ငွေထုတ်ယူမှုအသစ် ပြုလုပ်ပါ။`
+        break
+
+      case 'transaction_admin_completed':
+        const isTonComp = body.currency === 'TON'
+        if (body.role === 'seller') {
+          message = `✅ *Admin မှ ရောင်းဝယ်မှု အတည်ပြုပြီးပါပြီ!*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${isTonComp ? `${Number(body.amount).toFixed(4)} TON` : `${Number(body.amount).toLocaleString()} MMK`}
+💰 *သင်ရရှိမည်:* ${isTonComp ? `${Number(body.seller_receives || 0).toFixed(4)} TON` : `${Number(body.seller_receives || 0).toLocaleString()} MMK`}
+🛒 *ဝယ်သူ:* ${body.buyer_username ? `@${body.buyer_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${body.admin_notes ? `\n📝 *Admin မှတ်ချက်:* ${body.admin_notes}\n` : ''}
+✅ သင့် Balance ထဲသို့ ငွေထည့်ပြီးပါပြီ။`
+        } else {
+          message = `✅ *Admin မှ ရောင်းဝယ်မှု အတည်ပြုပြီးပါပြီ!*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${isTonComp ? `${Number(body.amount).toFixed(4)} TON` : `${Number(body.amount).toLocaleString()} MMK`}
+🏪 *ရောင်းသူ:* ${body.seller_username ? `@${body.seller_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${body.admin_notes ? `\n📝 *Admin မှတ်ချက်:* ${body.admin_notes}\n` : ''}
+✅ ရောင်းဝယ်မှု ပြီးဆုံးပါပြီ။`
+        }
+        break
+
+      case 'transaction_admin_cancelled':
+        const isTonCanc = body.currency === 'TON'
+        if (body.role === 'seller') {
+          message = `❌ *Admin မှ ရောင်းဝယ်မှု ပယ်ဖျက်ခဲ့ပါပြီ*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${isTonCanc ? `${Number(body.amount).toFixed(4)} TON` : `${Number(body.amount).toLocaleString()} MMK`}
+🛒 *ဝယ်သူ:* ${body.buyer_username ? `@${body.buyer_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${body.admin_notes}\n` : ''}
+⚠️ ရောင်းဝယ်မှု ပယ်ဖျက်ခံရပါပြီ။`
+        } else {
+          message = `❌ *Admin မှ ရောင်းဝယ်မှု ပယ်ဖျက်ခဲ့ပါပြီ*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${isTonCanc ? `${Number(body.amount).toFixed(4)} TON` : `${Number(body.amount).toLocaleString()} MMK`}
+🏪 *ရောင်းသူ:* ${body.seller_username ? `@${body.seller_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${body.admin_notes}\n` : ''}
+⚠️ ရောင်းဝယ်မှု ပယ်ဖျက်ခံရပါပြီ။`
+        }
         break
 
       case 'custom':
