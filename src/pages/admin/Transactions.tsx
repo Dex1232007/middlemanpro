@@ -97,7 +97,7 @@ export default function AdminTransactions() {
   const [isActionProcessing, setIsActionProcessing] = useState(false);
 
   // Store seller/buyer info for display
-  const [profiles, setProfiles] = useState<Record<string, { telegram_username: string | null }>>({});
+  const [profiles, setProfiles] = useState<Record<string, { telegram_username: string | null; telegram_id: number | null }>>({});
 
   useEffect(() => {
     fetchTransactions();
