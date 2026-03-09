@@ -66,6 +66,7 @@ interface TransactionWithRatings extends Transaction {
   currency: string;
   amount_mmk: number | null;
   expires_at?: string | null;
+  buyer_msg_id?: number | null;
 }
 
 interface PaymentRecord {
