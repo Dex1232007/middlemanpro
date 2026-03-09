@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { Search, RefreshCw, ExternalLink, Download, Calendar, Filter, Star } from 'lucide-react';
+import { Search, RefreshCw, ExternalLink, Download, Calendar, Filter, Star, Eye } from 'lucide-react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { TransactionStatusBadge } from '@/components/admin/StatusBadge';
 import { RatingDisplay } from '@/components/admin/RatingDisplay';
