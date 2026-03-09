@@ -498,7 +498,6 @@ ${payMethodIcon} *Payment:* ${payMethodName}
             JSON.stringify({ success: true }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
-          )
         }
         break
 
