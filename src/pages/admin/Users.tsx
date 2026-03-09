@@ -83,7 +83,11 @@ export default function AdminUsers() {
   // Profile detail dialog states
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
   const [profileRatings, setProfileRatings] = useState<UserRating[]>([]);
-  const [isLoadingRatings, setIsLoadingRatings] = useState(false);
+  const [profileTransactions, setProfileTransactions] = useState<any[]>([]);
+  const [profileDeposits, setProfileDeposits] = useState<any[]>([]);
+  const [profileWithdrawals, setProfileWithdrawals] = useState<any[]>([]);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [profileTab, setProfileTab] = useState('overview');
 
   useEffect(() => {
     fetchUsers();
