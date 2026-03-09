@@ -522,7 +522,7 @@ export default function AdminTransactions() {
                 <TableBody>
                   {filteredTransactions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={currencyTab === 'all' ? 10 : currencyTab === 'MMK' ? 8 : 9} className="h-24 text-center">
+                      <TableCell colSpan={currencyTab === 'all' ? 11 : currencyTab === 'MMK' ? 9 : 10} className="h-24 text-center">
                         ရောင်းဝယ်မှု မရှိပါ
                       </TableCell>
                     </TableRow>
