@@ -2202,26 +2202,58 @@ async function showHistory(chatId: number, msgId: number, username?: string) {
   }
 
   let text = `📜 *ကျွန်ုပ်၏ မှတ်တမ်း*\n\n`;
+  let totalSold = 0;
+  let totalBought = 0;
 
   if (sellerTxs?.length) {
     text += `━━━ 📤 *ရောင်းခဲ့သည်* ━━━\n\n`;
     for (const tx of sellerTxs) {
+      const isMMK = tx.currency === "MMK";
+      const amountStr = isMMK
+        ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK`
+        : `${Number(tx.amount_ton).toFixed(2)} TON`;
+      const receivesStr = isMMK
+        ? `${Number(tx.seller_receives_ton).toLocaleString()} MMK`
+        : `${Number(tx.seller_receives_ton).toFixed(2)} TON`;
       const date = new Date(tx.created_at).toLocaleDateString("my-MM");
       const statusIcon = tx.status === "completed" ? "✅" : "❌";
+      const icon = isMMK ? "💵" : "💎";
       const buyerRating = tx.buyer?.avg_rating ? ` ⭐${tx.buyer.avg_rating}` : "";
-      text += `${statusIcon} *${tx.products?.title}*\n💵 ${tx.amount_ton} TON | ${date}${buyerRating}\n\n`;
+      const buyerName = tx.buyer?.telegram_username ? `@${tx.buyer.telegram_username}` : "Unknown";
+      
+      text += `${statusIcon} *${tx.products?.title}*\n`;
+      text += `${icon} ${amountStr} → 💰 ${receivesStr}\n`;
+      text += `👤 ဝယ်သူ: ${buyerName}${buyerRating}\n`;
+      text += `📅 ${date}\n\n`;
+      
+      if (tx.status === "completed") totalSold++;
     }
   }
 
   if (buyerTxs?.length) {
     text += `━━━ 📥 *ဝယ်ခဲ့သည်* ━━━\n\n`;
     for (const tx of buyerTxs) {
+      const isMMK = tx.currency === "MMK";
+      const amountStr = isMMK
+        ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK`
+        : `${Number(tx.amount_ton).toFixed(2)} TON`;
       const date = new Date(tx.created_at).toLocaleDateString("my-MM");
       const statusIcon = tx.status === "completed" ? "✅" : "❌";
+      const icon = isMMK ? "💵" : "💎";
       const sellerRating = tx.seller?.avg_rating ? ` ⭐${tx.seller.avg_rating}` : "";
-      text += `${statusIcon} *${tx.products?.title}*\n💵 ${tx.amount_ton} TON | ${date}${sellerRating}\n\n`;
+      const sellerName = tx.seller?.telegram_username ? `@${tx.seller.telegram_username}` : "Unknown";
+      
+      text += `${statusIcon} *${tx.products?.title}*\n`;
+      text += `${icon} ${amountStr}\n`;
+      text += `🏪 ရောင်းသူ: ${sellerName}${sellerRating}\n`;
+      text += `📅 ${date}\n\n`;
+      
+      if (tx.status === "completed") totalBought++;
     }
   }
+
+  text += `━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `📊 *စုစုပေါင်း:* ✅ ရောင်း ${totalSold} ခု | ✅ ဝယ် ${totalBought} ခု`;
 
   await editText(chatId, msgId, text, backBtn());
 }
