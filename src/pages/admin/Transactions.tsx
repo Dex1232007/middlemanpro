@@ -237,6 +237,105 @@ export default function AdminTransactions() {
 
   const hasActiveFilters = searchTerm || statusFilter !== 'all' || dateFrom || dateTo || minAmount || maxAmount || ratingFilter !== 'all';
 
+  const handleTransactionAction = async () => {
+    if (!selectedTx || !actionType) return;
+    
+    setIsActionProcessing(true);
+    try {
+      const newStatus = actionType === 'confirm' ? 'completed' : 'cancelled';
+      
+      // Update transaction status
+      const { error: updateError } = await supabase
+        .from('transactions')
+        .update({ 
+          status: newStatus,
+          ...(actionType === 'confirm' ? { confirmed_at: new Date().toISOString() } : {}),
+        })
+        .eq('id', selectedTx.id);
+      
+      if (updateError) throw updateError;
+
+      // If confirming (completed), add seller_receives_ton to seller balance
+      if (actionType === 'confirm' && selectedTx.seller_id) {
+        const { data: sellerProfile } = await supabase
+          .from('profiles')
+          .select('balance, balance_mmk')
+          .eq('id', selectedTx.seller_id)
+          .single();
+        
+        if (sellerProfile) {
+          if (selectedTx.currency === 'MMK') {
+            await supabase.from('profiles').update({
+              balance_mmk: Number(sellerProfile.balance_mmk) + Number(selectedTx.seller_receives_ton)
+            }).eq('id', selectedTx.seller_id);
+          } else {
+            await supabase.from('profiles').update({
+              balance: Number(sellerProfile.balance) + Number(selectedTx.seller_receives_ton)
+            }).eq('id', selectedTx.seller_id);
+          }
+        }
+      }
+
+      // Notify both seller and buyer via Telegram
+      const sellerUsername = selectedTx.seller_id ? profiles[selectedTx.seller_id]?.telegram_username : null;
+      const buyerUsername = selectedTx.buyer_id ? profiles[selectedTx.buyer_id]?.telegram_username : null;
+
+      // Notify seller
+      if (selectedTx.seller_id) {
+        await supabase.functions.invoke('notify-user', {
+          body: {
+            type: actionType === 'confirm' ? 'transaction_admin_completed' : 'transaction_admin_cancelled',
+            profile_id: selectedTx.seller_id,
+            amount: selectedTx.currency === 'MMK' ? selectedTx.amount_mmk : selectedTx.amount_ton,
+            currency: selectedTx.currency,
+            admin_notes: actionReason,
+            product_title: selectedTx.unique_link,
+            buyer_username: buyerUsername,
+            seller_username: sellerUsername,
+            seller_receives: Number(selectedTx.seller_receives_ton),
+            role: 'seller',
+          }
+        });
+      }
+
+      // Notify buyer
+      if (selectedTx.buyer_id) {
+        await supabase.functions.invoke('notify-user', {
+          body: {
+            type: actionType === 'confirm' ? 'transaction_admin_completed' : 'transaction_admin_cancelled',
+            profile_id: selectedTx.buyer_id,
+            amount: selectedTx.currency === 'MMK' ? selectedTx.amount_mmk : selectedTx.amount_ton,
+            currency: selectedTx.currency,
+            admin_notes: actionReason,
+            product_title: selectedTx.unique_link,
+            buyer_username: buyerUsername,
+            seller_username: sellerUsername,
+            role: 'buyer',
+          }
+        });
+      }
+
+      toast({
+        title: actionType === 'confirm' ? '✅ အတည်ပြုပြီးပါပြီ' : '❌ ပယ်ဖျက်ပြီးပါပြီ',
+        description: `Transaction ကို ${actionType === 'confirm' ? 'completed' : 'cancelled'} သို့ပြောင်းပြီးပါပြီ`,
+      });
+      
+      setActionType(null);
+      setActionReason('');
+      setSelectedTx(null);
+      fetchTransactions();
+    } catch (error) {
+      console.error('Error updating transaction:', error);
+      toast({
+        title: 'Error',
+        description: 'Transaction ပြင်ဆင်မှု မအောင်မြင်ပါ',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsActionProcessing(false);
+    }
+  };
+
   // Get amount label based on currency
   const getAmountLabel = () => {
     if (currencyTab === 'MMK') return 'ပမာဏ (MMK)';
