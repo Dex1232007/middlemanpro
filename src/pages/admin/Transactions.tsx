@@ -62,6 +62,12 @@ interface TransactionWithRatings extends Transaction {
   amount_mmk: number | null;
 }
 
+interface PaymentRecord {
+  id: string;
+  transaction_id: string;
+  screenshot_url: string | null;
+}
+
 export default function AdminTransactions() {
   const [transactions, setTransactions] = useState<TransactionWithRatings[]>([]);
   const [isLoading, setIsLoading] = useState(true);
