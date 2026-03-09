@@ -4060,6 +4060,14 @@ async function handleDispute(chatId: number, msgId: number, txId: string, cbId: 
     ],
   });
 
+  // Currency-aware display
+  const txCurrency = tx.currency || "TON";
+  const isMMK = txCurrency === "MMK";
+  const disputeAmountDisplay = isMMK 
+    ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK` 
+    : `${Number(tx.amount_ton).toFixed(2)} TON`;
+  const disputeIcon = isMMK ? "💵" : "💎";
+
   // Update buyer's message
   await editText(
     chatId,
@@ -4074,7 +4082,7 @@ async function handleDispute(chatId: number, msgId: number, txId: string, cbId: 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *${tx.amount_ton} TON*
+${disputeIcon} *${disputeAmountDisplay}*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📋 *အခြေအနေ:* အငြင်းပွားမှု စိစစ်နေပါသည်
@@ -4100,7 +4108,7 @@ async function handleDispute(chatId: number, msgId: number, txId: string, cbId: 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *${tx.amount_ton} TON*
+${disputeIcon} *${disputeAmountDisplay}*
 👤 *ဝယ်သူ:* ${buyerUsername}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -4124,7 +4132,8 @@ async function handleDispute(chatId: number, msgId: number, txId: string, cbId: 
       },
       body: JSON.stringify({
         type: "admin_new_dispute",
-        amount: tx.amount_ton,
+        amount: isMMK ? tx.amount_mmk : tx.amount_ton,
+        currency: txCurrency,
         product_title: tx.products?.title,
         user_telegram_username: tx.buyer?.telegram_username,
         seller_username: tx.seller?.telegram_username,
