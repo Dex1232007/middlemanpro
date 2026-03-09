@@ -244,21 +244,24 @@ export default function AdminTransactions() {
     
     setIsActionProcessing(true);
     try {
-      const newStatus = actionType === 'confirm' ? 'completed' : 'cancelled';
+      const shouldCompleteNow = selectedTx.status === 'item_sent' || selectedTx.status === 'disputed';
+      const newStatus: TransactionStatus = actionType === 'confirm'
+        ? (shouldCompleteNow ? 'completed' : 'payment_received')
+        : 'cancelled';
       
       // Update transaction status
       const { error: updateError } = await supabase
         .from('transactions')
         .update({ 
           status: newStatus,
-          ...(actionType === 'confirm' ? { confirmed_at: new Date().toISOString() } : {}),
+          ...(actionType === 'confirm' && newStatus === 'completed' ? { confirmed_at: new Date().toISOString() } : {}),
         })
         .eq('id', selectedTx.id);
       
       if (updateError) throw updateError;
 
-      // If confirming (completed), add seller_receives_ton to seller balance
-      if (actionType === 'confirm' && selectedTx.seller_id) {
+      // Only when truly completing, add seller amount to balance
+      if (actionType === 'confirm' && newStatus === 'completed' && selectedTx.seller_id) {
         const { data: sellerProfile } = await supabase
           .from('profiles')
           .select('balance, balance_mmk')
