@@ -3939,6 +3939,10 @@ ${currencyIcon} *+${displayAmount}*
 
       // Ask seller to rate buyer
       if (tx.buyer?.id) {
+        const rateAmountStr = isMMK 
+          ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK` 
+          : `${Number(tx.amount_ton).toFixed(2)} TON`;
+        const rateIcon = isMMK ? "💵" : "💎";
         await sendMessage(
           tx.seller.telegram_id,
           `⭐ *ဝယ်သူကို အဆင့်သတ်မှတ်ပေးပါ*
@@ -3951,7 +3955,7 @@ ${currencyIcon} *+${displayAmount}*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *${tx.amount_ton} TON*
+${rateIcon} *${rateAmountStr}*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
 💬 ဝယ်သူအား ဘယ်လောက် အဆင့်ပေးမလဲ?
@@ -3967,6 +3971,13 @@ ${currencyIcon} *+${displayAmount}*
   await answerCb(cbId, "✅ အတည်ပြုပြီး!");
 
   // Prepare success message for buyer with rating prompt
+  const buyerAmountStr = isMMK 
+    ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK` 
+    : `${Number(tx.amount_ton).toFixed(2)} TON`;
+  const buyerCommStr = isMMK
+    ? `${Number(tx.commission_ton).toLocaleString()} MMK`
+    : `${Number(tx.commission_ton).toFixed(4)} TON`;
+  const buyerIcon = isMMK ? "💵" : "💎";
   const successMsg = tx.seller?.id
     ? `🎉 *အရောင်းအဝယ် ပြီးဆုံးပါပြီ!*
 
@@ -3978,8 +3989,8 @@ ${currencyIcon} *+${displayAmount}*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *${tx.amount_ton} TON*
-🏷️ ကော်မရှင်: ${tx.commission_ton} TON
+${buyerIcon} *${buyerAmountStr}*
+🏷️ ကော်မရှင်: ${buyerCommStr}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⭐ *ရောင်းသူကို အဆင့်သတ်မှတ်ပေးပါ*
@@ -3992,7 +4003,7 @@ ${currencyIcon} *+${displayAmount}*
 
 ━━━━━━━━━━━━━━━
 📦 ${tx.products?.title}
-💵 ${tx.amount_ton} TON
+${buyerIcon} ${buyerAmountStr}
 ━━━━━━━━━━━━━━━
 
 ကျေးဇူးတင်ပါသည် 🙏`;
