@@ -32,6 +32,27 @@ async function sendTelegramMessage(chatId: number, text: string, parseMode = 'Ma
   return result
 }
 
+async function sendTelegramPhoto(chatId: number, photoUrl: string, caption: string, parseMode = 'Markdown', keyboard?: object) {
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`
+  const body: Record<string, unknown> = {
+    chat_id: chatId,
+    photo: photoUrl,
+    caption,
+    parse_mode: parseMode,
+  }
+  if (keyboard) body.reply_markup = keyboard
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  
+  const result = await response.json()
+  console.log('Telegram photo send result:', result)
+  return result
+}
+
 interface NotifyRequest {
   type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx' | 'admin_new_deposit' | 'admin_transaction_completed' | 'mmk_deposit_approved' | 'mmk_deposit_rejected' | 'admin_new_mmk_withdrawal' | 'mmk_withdrawal_approved' | 'mmk_withdrawal_rejected' | 'admin_new_mmk_deposit' | 'admin_new_mmk_payment'
   profile_id?: string
@@ -60,6 +81,7 @@ interface NotifyRequest {
   deposit_id?: string
   payment_id?: string
   transaction_id?: string
+  screenshot_url?: string
 }
 
 async function verifyAdminAuth(req: Request): Promise<{ authorized: boolean; error?: string }> {
@@ -398,13 +420,9 @@ ${mmkMethodIcon} *Payment:* ${mmkMethodName}
       case 'admin_new_mmk_deposit':
         const depMethodName = body.payment_method === 'KBZPAY' ? 'KBZPay' : body.payment_method === 'WAVEPAY' ? 'WavePay' : 'MMK'
         const depMethodIcon = body.payment_method === 'KBZPAY' ? '📱' : '📲'
-        message = `💰 *MMK ငွေသွင်းမှု အသစ်!*
+        const depCaption = `💰 *MMK ငွေသွင်းမှု အသစ်!*
 
-╔══════════════════════════════╗
-║                              ║
-║   ${depMethodIcon} *NEW MMK DEPOSIT*      ║
-║                              ║
-╚══════════════════════════════╝
+${depMethodIcon} *NEW MMK DEPOSIT*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 💵 *ပမာဏ:* ${Number(body.amount).toLocaleString()} MMK
@@ -425,7 +443,13 @@ ${depMethodIcon} *Payment:* ${depMethodName}
               ]
             ]
           }
-          await sendTelegramMessage(telegramId, message, 'Markdown', mmkDepBtns)
+          
+          // Send photo with screenshot if available, otherwise send text
+          if (body.screenshot_url) {
+            await sendTelegramPhoto(telegramId, body.screenshot_url, depCaption, 'Markdown', mmkDepBtns)
+          } else {
+            await sendTelegramMessage(telegramId, depCaption, 'Markdown', mmkDepBtns)
+          }
           
           return new Response(
             JSON.stringify({ success: true }),
@@ -437,13 +461,9 @@ ${depMethodIcon} *Payment:* ${depMethodName}
       case 'admin_new_mmk_payment':
         const payMethodName = body.payment_method === 'KBZPAY' ? 'KBZPay' : body.payment_method === 'WAVEPAY' ? 'WavePay' : 'MMK'
         const payMethodIcon = body.payment_method === 'KBZPAY' ? '📱' : '📲'
-        message = `💵 *MMK ဝယ်ယူမှုငွေချေ အသစ်!*
+        const payCaption = `💵 *MMK ဝယ်ယူမှုငွေချေ အသစ်!*
 
-╔══════════════════════════════╗
-║                              ║
-║   ${payMethodIcon} *NEW MMK PAYMENT*      ║
-║                              ║
-╚══════════════════════════════╝
+${payMethodIcon} *NEW MMK PAYMENT*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 💵 *ပမာဏ:* ${Number(body.amount).toLocaleString()} MMK
@@ -466,7 +486,13 @@ ${payMethodIcon} *Payment:* ${payMethodName}
               ]
             ]
           }
-          await sendTelegramMessage(telegramId, message, 'Markdown', mmkPayBtns)
+          
+          // Send photo with screenshot if available, otherwise send text
+          if (body.screenshot_url) {
+            await sendTelegramPhoto(telegramId, body.screenshot_url, payCaption, 'Markdown', mmkPayBtns)
+          } else {
+            await sendTelegramMessage(telegramId, payCaption, 'Markdown', mmkPayBtns)
+          }
           
           return new Response(
             JSON.stringify({ success: true }),
