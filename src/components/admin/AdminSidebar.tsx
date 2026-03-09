@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -10,118 +10,176 @@ import {
   LogOut,
   Bot,
   PiggyBank,
-  Menu,
   BarChart3,
   Megaphone,
-  Gift
+  Gift,
+  MoreHorizontal
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 const menuItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/admin' },
+  { icon: LayoutDashboard, label: 'Dashboard', shortLabel: 'Home', path: '/admin' },
+  { icon: ArrowLeftRight, label: 'ရောင်းဝယ်မှုများ', shortLabel: 'Trade', path: '/admin/transactions' },
+  { icon: Users, label: 'အသုံးပြုသူများ', shortLabel: 'Users', path: '/admin/users' },
+  { icon: PiggyBank, label: 'ငွေသွင်းမှုများ', shortLabel: 'Deposit', path: '/admin/deposits' },
+  { icon: Wallet, label: 'ငွေထုတ်ယူမှုများ', shortLabel: 'Withdraw', path: '/admin/withdrawals' },
+];
+
+const moreMenuItems = [
   { icon: BarChart3, label: 'Analytics', path: '/admin/analytics' },
-  { icon: ArrowLeftRight, label: 'ရောင်းဝယ်မှုများ', path: '/admin/transactions' },
-  { icon: Users, label: 'အသုံးပြုသူများ', path: '/admin/users' },
   { icon: Gift, label: 'Referral Leaderboard', path: '/admin/referrals' },
-  { icon: PiggyBank, label: 'ငွေသွင်းမှုများ', path: '/admin/deposits' },
-  { icon: Wallet, label: 'ငွေထုတ်ယူမှုများ', path: '/admin/withdrawals' },
   { icon: AlertTriangle, label: 'အငြင်းပွားမှုများ', path: '/admin/disputes' },
   { icon: Megaphone, label: 'ကြေညာချက်', path: '/admin/broadcast' },
   { icon: Settings, label: 'ဆက်တင်များ', path: '/admin/settings' },
 ];
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+const allMenuItems = [...menuItems, ...moreMenuItems];
+
+function DesktopSidebar() {
   const location = useLocation();
   const { signOut } = useAuth();
 
-  const handleSignOut = () => {
-    onNavigate?.();
-    signOut();
-  };
-
   return (
-    <div className="flex h-full flex-col bg-card">
-      {/* Logo */}
-      <div className="flex h-16 items-center gap-3 border-b border-border px-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-          <Bot className="h-6 w-6 text-primary-foreground" />
+    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 border-r border-border bg-card md:block">
+      <div className="flex h-full flex-col">
+        {/* Logo */}
+        <div className="flex h-16 items-center gap-3 border-b border-border px-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
+            <Bot className="h-6 w-6 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="font-bold text-foreground">Middleman Bot</h1>
+            <p className="text-xs text-muted-foreground">Admin Panel</p>
+          </div>
         </div>
-        <div>
-          <h1 className="font-bold text-foreground">Middleman Bot</h1>
-          <p className="text-xs text-muted-foreground">Admin Panel</p>
+
+        {/* Navigation */}
+        <nav className="flex-1 space-y-1 p-3">
+          {allMenuItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-foreground hover:bg-muted'
+                )}
+              >
+                <item.icon className="h-5 w-5" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Logout */}
+        <div className="border-t border-border p-3">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => signOut()}
+          >
+            <LogOut className="h-5 w-5" />
+            ထွက်မည်
+          </Button>
         </div>
       </div>
+    </aside>
+  );
+}
 
-      {/* Navigation */}
-      <nav className="flex-1 space-y-1 p-3">
+function MobileBottomNav() {
+  const location = useLocation();
+  const { signOut } = useAuth();
+  const isMoreActive = moreMenuItems.some(item => item.path === location.pathname);
+
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card md:hidden safe-area-bottom">
+      <div className="flex items-center justify-around px-1 py-1">
         {menuItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
             <Link
               key={item.path}
               to={item.path}
-              onClick={onNavigate}
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition-colors',
+                'flex flex-1 flex-col items-center gap-0.5 rounded-lg py-2 text-[10px] font-medium transition-colors',
                 isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-foreground hover:bg-muted'
+                  ? 'text-primary'
+                  : 'text-muted-foreground'
               )}
             >
-              <item.icon className="h-5 w-5" />
-              {item.label}
+              <item.icon className={cn('h-5 w-5', isActive && 'text-primary')} />
+              <span>{item.shortLabel}</span>
             </Link>
           );
         })}
-      </nav>
 
-      {/* Logout */}
-      <div className="border-t border-border p-3">
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={handleSignOut}
-        >
-          <LogOut className="h-5 w-5" />
-          ထွက်မည်
-        </Button>
+        {/* More dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className={cn(
+                'flex flex-1 flex-col items-center gap-0.5 rounded-lg py-2 text-[10px] font-medium transition-colors',
+                isMoreActive
+                  ? 'text-primary'
+                  : 'text-muted-foreground'
+              )}
+            >
+              <MoreHorizontal className={cn('h-5 w-5', isMoreActive && 'text-primary')} />
+              <span>More</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="top" className="w-56 mb-2">
+            {moreMenuItems.map((item) => {
+              const isActive = location.pathname === item.path;
+              return (
+                <DropdownMenuItem key={item.path} asChild>
+                  <Link
+                    to={item.path}
+                    className={cn(
+                      'flex items-center gap-3 cursor-pointer',
+                      isActive && 'text-primary font-semibold'
+                    )}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                </DropdownMenuItem>
+              );
+            })}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="flex items-center gap-3 text-destructive cursor-pointer"
+              onClick={() => signOut()}
+            >
+              <LogOut className="h-4 w-4" />
+              ထွက်မည်
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-    </div>
+    </nav>
   );
 }
 
 export function AdminSidebar() {
-  const [open, setOpen] = useState(false);
-
   return (
     <>
-      {/* Mobile Header with Menu Button */}
-      <header className="fixed top-0 left-0 right-0 z-50 flex h-14 items-center justify-between border-b border-border bg-background px-4 md:hidden">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Bot className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <span className="font-bold">Middleman Bot</span>
-        </div>
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="md:hidden">
-              <Menu className="h-5 w-5" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0 bg-card">
-            <SidebarContent onNavigate={() => setOpen(false)} />
-          </SheetContent>
-        </Sheet>
-      </header>
-
-      {/* Desktop Sidebar - Hidden on mobile */}
-      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 border-r border-border bg-card md:block">
-        <SidebarContent />
-      </aside>
+      <MobileBottomNav />
+      <DesktopSidebar />
     </>
   );
 }
