@@ -2293,8 +2293,14 @@ async function showMyLinks(chatId: number, msgId: number, username?: string) {
     const hasBuyer = !!tx.buyer_id;
     const buyerStatus = hasBuyer ? "👤 ဝယ်သူရှိ" : "⏳ ဝယ်သူမရှိ";
 
+    const isMMK = tx.currency === "MMK";
+    const amountStr = isMMK
+      ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK`
+      : `${Number(tx.amount_ton).toFixed(2)} TON`;
+    const icon = isMMK ? "💵" : "💎";
+
     text += `📦 *${tx.products?.title}*\n`;
-    text += `💵 ${tx.amount_ton} TON | ${statusIcon}\n`;
+    text += `${icon} ${amountStr} | ${statusIcon}\n`;
     text += `${buyerStatus}\n`;
     text += `🔗 \`https://t.me/${botUsername}?start=buy_${tx.unique_link}\`\n\n`;
 
