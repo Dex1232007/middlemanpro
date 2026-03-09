@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { 
   RefreshCw, CheckCircle, XCircle, AlertTriangle, User, Package, 
   Search, Clock, MessageSquare, Eye, Copy, ExternalLink, Filter,
-  ShieldAlert, Loader2, ImageIcon
+  ShieldAlert, Loader2, ImageIcon, Send
 } from 'lucide-react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { TransactionStatusBadge } from '@/components/admin/StatusBadge';
@@ -29,6 +29,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import type { TransactionStatus } from '@/types/database';
+
+interface DisputeMessage {
+  id: string;
+  transaction_id: string;
+  sender_id: string | null;
+  sender_role: 'buyer' | 'seller' | 'admin';
+  message_text: string;
+  created_at: string;
+}
 
 interface DisputeTransaction {
   id: string;
