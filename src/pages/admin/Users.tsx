@@ -127,48 +127,54 @@ export default function AdminUsers() {
   const openProfileDialog = async (user: ExtendedProfile) => {
     setSelectedUser(user);
     setIsProfileDialogOpen(true);
-    setIsLoadingRatings(true);
+    setProfileTab('overview');
+    setIsLoadingProfile(true);
     
     try {
-      // Fetch ratings for this user (where they are rated)
-      const { data, error } = await supabase
-        .from('ratings')
-        .select(`
-          id,
-          rating,
-          comment,
-          created_at,
-          rater_id,
-          transaction_id
-        `)
-        .eq('rated_id', user.id)
-        .order('created_at', { ascending: false });
+      // Fetch all data in parallel
+      const [ratingsRes, txRes, depositsRes, withdrawalsRes] = await Promise.all([
+        // Ratings
+        supabase.from('ratings').select('id, rating, comment, created_at, rater_id, transaction_id')
+          .eq('rated_id', user.id).order('created_at', { ascending: false }),
+        // Transactions (as seller or buyer)
+        supabase.from('transactions').select('*')
+          .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`)
+          .order('created_at', { ascending: false }).limit(50),
+        // Deposits
+        supabase.from('deposits').select('*')
+          .eq('profile_id', user.id).order('created_at', { ascending: false }).limit(50),
+        // Withdrawals
+        supabase.from('withdrawals').select('*')
+          .eq('profile_id', user.id).order('created_at', { ascending: false }).limit(50),
+      ]);
 
-      if (error) throw error;
+      // Fetch rater profiles for ratings
+      const raterIds = [...new Set((ratingsRes.data || []).map(r => r.rater_id))];
+      let raterMap: Record<string, { telegram_username: string | null }> = {};
+      if (raterIds.length > 0) {
+        const { data: raterProfiles } = await supabase
+          .from('profiles').select('id, telegram_username').in('id', raterIds);
+        raterProfiles?.forEach(p => { raterMap[p.id] = { telegram_username: p.telegram_username }; });
+      }
 
-      // Fetch rater profiles
-      const raterIds = [...new Set((data || []).map(r => r.rater_id))];
-      const { data: raterProfiles } = await supabase
-        .from('profiles')
-        .select('id, telegram_username')
-        .in('id', raterIds);
+      // Fetch seller/buyer profiles for transactions
+      const txData = txRes.data || [];
+      const profileIds = [...new Set(txData.flatMap(tx => [tx.seller_id, tx.buyer_id].filter(Boolean)))];
+      let txProfileMap: Record<string, string> = {};
+      if (profileIds.length > 0) {
+        const { data: txProfiles } = await supabase
+          .from('profiles').select('id, telegram_username').in('id', profileIds as string[]);
+        txProfiles?.forEach(p => { txProfileMap[p.id] = p.telegram_username || 'unknown'; });
+      }
 
-      const raterMap: Record<string, { telegram_username: string | null }> = {};
-      raterProfiles?.forEach(p => {
-        raterMap[p.id] = { telegram_username: p.telegram_username };
-      });
-
-      const ratingsWithRater = (data || []).map(r => ({
-        ...r,
-        rater: raterMap[r.rater_id] || { telegram_username: null }
-      }));
-
-      setProfileRatings(ratingsWithRater);
+      setProfileRatings((ratingsRes.data || []).map(r => ({ ...r, rater: raterMap[r.rater_id] || { telegram_username: null } })));
+      setProfileTransactions(txData.map(tx => ({ ...tx, _sellerName: txProfileMap[tx.seller_id || ''], _buyerName: txProfileMap[tx.buyer_id || ''] })));
+      setProfileDeposits(depositsRes.data || []);
+      setProfileWithdrawals(withdrawalsRes.data || []);
     } catch (error) {
-      console.error('Error fetching ratings:', error);
-      toast.error('Ratings ယူရာတွင် အမှားရှိပါသည်');
+      console.error('Error fetching profile data:', error);
     } finally {
-      setIsLoadingRatings(false);
+      setIsLoadingProfile(false);
     }
   };
 
