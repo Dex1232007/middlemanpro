@@ -631,7 +631,74 @@ export default function AdminDisputes() {
                   </div>
                 </div>
 
-                {/* Payment Screenshot */}
+                {/* Dispute Chat Log */}
+                <div className="rounded-lg border p-4">
+                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    Dispute Chat မှတ်တမ်း
+                    {chatMessages.length > 0 && (
+                      <Badge variant="secondary" className="text-xs">{chatMessages.length}</Badge>
+                    )}
+                  </h4>
+                  
+                  {chatMessages.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">Chat မှတ်တမ်း မရှိသေးပါ</p>
+                  ) : (
+                    <ScrollArea className="max-h-60 pr-2">
+                      <div className="space-y-2">
+                        {chatMessages.map((msg) => {
+                          const isBuyer = msg.sender_role === 'buyer';
+                          const isSeller = msg.sender_role === 'seller';
+                          const isAdmin = msg.sender_role === 'admin';
+                          return (
+                            <div
+                              key={msg.id}
+                              className={`rounded-lg p-2.5 text-sm ${
+                                isAdmin
+                                  ? 'bg-primary/10 border border-primary/20'
+                                  : isBuyer
+                                  ? 'bg-muted/50 border border-muted'
+                                  : 'bg-accent/30 border border-accent/40'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge variant={isAdmin ? 'default' : isBuyer ? 'secondary' : 'outline'} className="text-[10px] px-1.5 py-0">
+                                  {isAdmin ? '👨‍💼 Admin' : isBuyer ? '🛒 ဝယ်သူ' : '🏪 ရောင်းသူ'}
+                                </Badge>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {format(new Date(msg.created_at), 'MM-dd HH:mm')}
+                                </span>
+                              </div>
+                              <p className="text-sm whitespace-pre-wrap">{msg.message_text}</p>
+                            </div>
+                          );
+                        })}
+                        <div ref={chatEndRef} />
+                      </div>
+                    </ScrollArea>
+                  )}
+
+                  {/* Admin reply */}
+                  <div className="mt-3 flex gap-2">
+                    <Input
+                      placeholder="Admin message ရိုက်ပါ..."
+                      value={adminMessage}
+                      onChange={(e) => setAdminMessage(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAdminMessage(); } }}
+                      className="flex-1"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={sendAdminMessage}
+                      disabled={!adminMessage.trim() || isSendingMessage}
+                    >
+                      {isSendingMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    💡 Admin message သည် ဝယ်သူနှင့် ရောင်းသူ နှစ်ဦးစလုံးထံ Telegram မှတဆင့် ပို့ပေးပါမည်
+                  </p>
+                </div>
                 {paymentInfo?.screenshot_url && (
                   <div className="rounded-lg border p-4">
                     <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
