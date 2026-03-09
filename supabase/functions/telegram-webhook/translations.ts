@@ -176,6 +176,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'common.amount': 'Amount',
     'common.phone': 'Phone Number',
     'common.wallet': 'Wallet',
+    
+    // Terms and Conditions
+    'terms.no_username': '⚠️ *Username Required*\n\nYou must set a Telegram Username to use this bot.\n\n📱 *How to set:*\nTelegram Settings → Edit Profile → Username\n\n✅ After setting username, press /start again.',
+    'terms.accept_btn': '✅ Accept',
   }
 }
 
