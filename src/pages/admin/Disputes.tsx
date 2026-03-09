@@ -152,15 +152,88 @@ export default function AdminDisputes() {
     setSelectedDispute(dispute);
     setAdminNotes('');
     setPaymentInfo(null);
+    setChatMessages([]);
+    setAdminMessage('');
     
-    // Fetch payment info if exists
-    const { data: payment } = await supabase
-      .from('payments')
-      .select('id, screenshot_url, payment_method, unique_code, amount_mmk, status')
-      .eq('transaction_id', dispute.id)
-      .maybeSingle();
+    // Fetch payment info and chat messages in parallel
+    const [paymentRes, chatRes] = await Promise.all([
+      supabase
+        .from('payments')
+        .select('id, screenshot_url, payment_method, unique_code, amount_mmk, status')
+        .eq('transaction_id', dispute.id)
+        .maybeSingle(),
+      supabase
+        .from('dispute_messages')
+        .select('*')
+        .eq('transaction_id', dispute.id)
+        .order('created_at', { ascending: true }),
+    ]);
     
-    if (payment) setPaymentInfo(payment as PaymentInfo);
+    if (paymentRes.data) setPaymentInfo(paymentRes.data as PaymentInfo);
+    if (chatRes.data) setChatMessages(chatRes.data as DisputeMessage[]);
+  };
+
+  const fetchChatMessages = async (txId: string) => {
+    const { data } = await supabase
+      .from('dispute_messages')
+      .select('*')
+      .eq('transaction_id', txId)
+      .order('created_at', { ascending: true });
+    if (data) setChatMessages(data as DisputeMessage[]);
+  };
+
+  const sendAdminMessage = async () => {
+    if (!selectedDispute || !adminMessage.trim()) return;
+    setIsSendingMessage(true);
+    try {
+      // Save to DB
+      await supabase.from('dispute_messages').insert({
+        transaction_id: selectedDispute.id,
+        sender_id: null,
+        sender_role: 'admin',
+        message_text: adminMessage.trim(),
+      });
+
+      // Send to both buyer and seller via notify-user
+      const promises = [];
+      if (selectedDispute.buyer?.telegram_id) {
+        promises.push(
+          supabase.functions.invoke('notify-user', {
+            body: {
+              type: 'dispute_admin_message',
+              telegram_id: selectedDispute.buyer.telegram_id,
+              message: adminMessage.trim(),
+              product_title: selectedDispute.products?.title,
+              transaction_id: selectedDispute.id,
+            },
+          })
+        );
+      }
+      if (selectedDispute.seller?.telegram_id) {
+        promises.push(
+          supabase.functions.invoke('notify-user', {
+            body: {
+              type: 'dispute_admin_message',
+              telegram_id: selectedDispute.seller.telegram_id,
+              message: adminMessage.trim(),
+              product_title: selectedDispute.products?.title,
+              transaction_id: selectedDispute.id,
+            },
+          })
+        );
+      }
+      await Promise.all(promises);
+
+      setAdminMessage('');
+      await fetchChatMessages(selectedDispute.id);
+      toast.success('Message ပို့ပြီးပါပြီ');
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast.error('Message ပို့၍ မရပါ');
+    } finally {
+      setIsSendingMessage(false);
+    }
   };
 
   const resolveDispute = async (resolution: 'completed' | 'cancelled') => {
