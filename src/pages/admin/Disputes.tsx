@@ -202,7 +202,7 @@ export default function AdminDisputes() {
             body: {
               type: 'dispute_admin_message',
               telegram_id: selectedDispute.buyer.telegram_id,
-              message: adminMessage.trim(),
+              custom_message: adminMessage.trim(),
               product_title: selectedDispute.products?.title,
               transaction_id: selectedDispute.id,
             },
