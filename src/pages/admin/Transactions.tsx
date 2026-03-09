@@ -568,6 +568,20 @@ export default function AdminTransactions() {
                             <TransactionStatusBadge status={tx.status} />
                           </TableCell>
                           <TableCell>
+                            {paymentScreenshots[tx.id] ? (
+                              <button
+                                onClick={() => setScreenshotPreview(paymentScreenshots[tx.id])}
+                                title="Screenshot ကြည့်ရန်"
+                              >
+                                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] px-1.5 cursor-pointer hover:bg-primary/20 transition-colors">
+                                  📷 SS
+                                </Badge>
+                              </button>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
                             {tx.ratings && tx.ratings.length > 0 ? (
                               <div className="flex flex-col gap-1">
                                 {tx.ratings.map((rating) => (
