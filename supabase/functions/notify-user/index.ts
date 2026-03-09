@@ -32,6 +32,23 @@ async function sendTelegramMessage(chatId: number, text: string, parseMode = 'Ma
   return result
 }
 
+async function deleteTelegramMessage(chatId: number, messageId: number) {
+  try {
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteMessage`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+    })
+    const result = await response.json()
+    console.log('Delete message result:', result)
+    return result.ok
+  } catch (e) {
+    console.error('Delete message error:', e)
+    return false
+  }
+}
+
 async function sendTelegramPhoto(chatId: number, photoUrl: string, caption: string, parseMode = 'Markdown', keyboard?: object) {
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`
   const body: Record<string, unknown> = {
@@ -84,6 +101,10 @@ interface NotifyRequest {
   screenshot_url?: string
   seller_receives?: number
   role?: 'seller' | 'buyer'
+  // Message deletion fields
+  buyer_msg_id?: number
+  buyer_telegram_id?: number
+  seller_telegram_id?: number
 }
 
 async function verifyAdminAuth(req: Request): Promise<{ authorized: boolean; error?: string }> {
@@ -549,8 +570,14 @@ ${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${bod
 ⚠️ ပြန်လည်ကြိုးစားလိုပါက ငွေထုတ်ယူမှုအသစ် ပြုလုပ်ပါ။`
         break
 
-      case 'transaction_admin_completed':
+      case 'transaction_admin_completed': {
         const isTonComp = body.currency === 'TON'
+        
+        // Delete old buyer message if this notification is for buyer
+        if (body.role === 'buyer' && body.buyer_msg_id && body.buyer_telegram_id) {
+          await deleteTelegramMessage(body.buyer_telegram_id, body.buyer_msg_id)
+        }
+        
         if (body.role === 'seller') {
           message = `✅ *Admin မှ ရောင်းဝယ်မှု အတည်ပြုပြီးပါပြီ!*
 
@@ -561,6 +588,18 @@ ${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${bod
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 ${body.admin_notes ? `\n📝 *Admin မှတ်ချက်:* ${body.admin_notes}\n` : ''}
 ✅ သင့် Balance ထဲသို့ ငွေထည့်ပြီးပါပြီ။`
+          
+          const sellerCompKb = {
+            inline_keyboard: [
+              ...(body.buyer_username ? [[{ text: '💬 ဝယ်သူနဲ့ Chat', url: `https://t.me/${body.buyer_username}` }]] : []),
+              [{ text: '🏠 ပင်မစာမျက်နှာ', callback_data: 'm:home' }]
+            ]
+          }
+          await sendTelegramMessage(telegramId, message, 'Markdown', sellerCompKb)
+          return new Response(
+            JSON.stringify({ success: true }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
         } else {
           message = `✅ *Admin မှ ရောင်းဝယ်မှု အတည်ပြုပြီးပါပြီ!*
 
@@ -570,11 +609,30 @@ ${body.admin_notes ? `\n📝 *Admin မှတ်ချက်:* ${body.admin_note
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 ${body.admin_notes ? `\n📝 *Admin မှတ်ချက်:* ${body.admin_notes}\n` : ''}
 ✅ ရောင်းဝယ်မှု ပြီးဆုံးပါပြီ။`
-        }
-        break
 
-      case 'transaction_admin_cancelled':
+          const buyerCompKb = {
+            inline_keyboard: [
+              ...(body.seller_username ? [[{ text: '💬 ရောင်းသူနဲ့ Chat', url: `https://t.me/${body.seller_username}` }]] : []),
+              [{ text: '⭐ အဆင့်သတ်မှတ်မည်', callback_data: `rate:${body.transaction_id || 'unknown'}` }],
+              [{ text: '🏠 ပင်မစာမျက်နှာ', callback_data: 'm:home' }]
+            ]
+          }
+          await sendTelegramMessage(telegramId, message, 'Markdown', buyerCompKb)
+          return new Response(
+            JSON.stringify({ success: true }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
+
+      case 'transaction_admin_cancelled': {
         const isTonCanc = body.currency === 'TON'
+        
+        // Delete old buyer message if this notification is for buyer
+        if (body.role === 'buyer' && body.buyer_msg_id && body.buyer_telegram_id) {
+          await deleteTelegramMessage(body.buyer_telegram_id, body.buyer_msg_id)
+        }
+        
         if (body.role === 'seller') {
           message = `❌ *Admin မှ ရောင်းဝယ်မှု ပယ်ဖျက်ခဲ့ပါပြီ*
 
@@ -584,6 +642,17 @@ ${body.admin_notes ? `\n📝 *Admin မှတ်ချက်:* ${body.admin_note
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 ${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${body.admin_notes}\n` : ''}
 ⚠️ ရောင်းဝယ်မှု ပယ်ဖျက်ခံရပါပြီ။`
+
+          const sellerCancKb = {
+            inline_keyboard: [
+              [{ text: '🏠 ပင်မစာမျက်နှာ', callback_data: 'm:home' }]
+            ]
+          }
+          await sendTelegramMessage(telegramId, message, 'Markdown', sellerCancKb)
+          return new Response(
+            JSON.stringify({ success: true }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
         } else {
           message = `❌ *Admin မှ ရောင်းဝယ်မှု ပယ်ဖျက်ခဲ့ပါပြီ*
 
@@ -593,8 +662,19 @@ ${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${bod
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 ${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${body.admin_notes}\n` : ''}
 ⚠️ ရောင်းဝယ်မှု ပယ်ဖျက်ခံရပါပြီ။`
+
+          const buyerCancKb = {
+            inline_keyboard: [
+              [{ text: '🏠 ပင်မစာမျက်နှာ', callback_data: 'm:home' }]
+            ]
+          }
+          await sendTelegramMessage(telegramId, message, 'Markdown', buyerCancKb)
+          return new Response(
+            JSON.stringify({ success: true }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
         }
-        break
+      }
 
       case 'custom':
         message = body.custom_message || 'Notification from Middleman Bot'
