@@ -307,6 +307,7 @@ export type Database = {
           referred_by: string | null
           telegram_id: number | null
           telegram_username: string | null
+          terms_accepted_at: string | null
           ton_wallet_address: string | null
           total_ratings: number | null
           total_referral_earnings: number | null
@@ -327,6 +328,7 @@ export type Database = {
           referred_by?: string | null
           telegram_id?: number | null
           telegram_username?: string | null
+          terms_accepted_at?: string | null
           ton_wallet_address?: string | null
           total_ratings?: number | null
           total_referral_earnings?: number | null
@@ -347,6 +349,7 @@ export type Database = {
           referred_by?: string | null
           telegram_id?: number | null
           telegram_username?: string | null
+          terms_accepted_at?: string | null
           ton_wallet_address?: string | null
           total_ratings?: number | null
           total_referral_earnings?: number | null
