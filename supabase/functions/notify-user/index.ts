@@ -101,6 +101,10 @@ interface NotifyRequest {
   screenshot_url?: string
   seller_receives?: number
   role?: 'seller' | 'buyer'
+  // Message deletion fields
+  buyer_msg_id?: number
+  buyer_telegram_id?: number
+  seller_telegram_id?: number
 }
 
 async function verifyAdminAuth(req: Request): Promise<{ authorized: boolean; error?: string }> {
