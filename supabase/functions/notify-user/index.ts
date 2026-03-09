@@ -212,13 +212,22 @@ Deno.serve(async (req) => {
       )
     }
 
+    // Currency-aware amount formatting helper
+    const cur = body.currency || 'TON'
+    const isMMK = cur === 'MMK'
+    const fmtAmt = (amt: number | string | undefined) => {
+      const n = Number(amt || 0)
+      return isMMK ? `${n.toLocaleString()} MMK` : `${n.toFixed(4)} TON`
+    }
+    const curIcon = isMMK ? '💵' : '💎'
+
     let message = ''
 
     switch (body.type) {
       case 'withdrawal_approved':
         message = `✅ *ငွေထုတ်ယူမှု အတည်ပြုပြီးပါပြီ!*
 
-💰 ပမာဏ: ${Number(body.amount).toFixed(4)} TON
+${curIcon} ပမာဏ: ${fmtAmt(body.amount)}
 ${body.tx_hash ? `🔗 TX Hash: \`${body.tx_hash}\`` : ''}
 ${body.admin_notes ? `📝 မှတ်ချက်: ${body.admin_notes}` : ''}
 
@@ -228,7 +237,7 @@ ${body.admin_notes ? `📝 မှတ်ချက်: ${body.admin_notes}` : ''}
       case 'withdrawal_rejected':
         message = `❌ *ငွေထုတ်ယူမှု ငြင်းပယ်ခံရပါပြီ*
 
-💰 ပမာဏ: ${Number(body.amount).toFixed(4)} TON
+${curIcon} ပမာဏ: ${fmtAmt(body.amount)}
 ${body.admin_notes ? `📝 အကြောင်းပြချက်: ${body.admin_notes}` : ''}
 
 သင့်လက်ကျန်ငွေသို့ ပြန်လည်ထည့်သွင်းပေးပါပြီ။`
@@ -239,13 +248,13 @@ ${body.admin_notes ? `📝 အကြောင်းပြချက်: ${body.ad
           ? `✅ *အငြင်းပွားမှု ဖြေရှင်းပြီးပါပြီ*
 
 📦 ${body.product_title || 'ပစ္စည်း'}
-💵 ${Number(body.amount).toFixed(4)} TON
+${curIcon} ${fmtAmt(body.amount)}
 
 ရောင်းသူထံ ငွေလွှဲပြောင်းပေးပြီးပါပြီ။`
           : `✅ *အငြင်းပွားမှု ဖြေရှင်းပြီးပါပြီ*
 
 📦 ${body.product_title || 'ပစ္စည်း'}
-💵 ${Number(body.amount).toFixed(4)} TON
+${curIcon} ${fmtAmt(body.amount)}
 
 အရောင်းအဝယ် ပယ်ဖျက်ပြီးပါပြီ။`
         break
@@ -255,7 +264,7 @@ ${body.admin_notes ? `📝 အကြောင်းပြချက်: ${body.ad
           ? `✅ *အငြင်းပွားမှု ဖြေရှင်းပြီးပါပြီ*
 
 📦 ${body.product_title || 'ပစ္စည်း'}
-💰 ရရှိသောငွေ: ${Number(body.amount).toFixed(4)} TON
+${curIcon} ရရှိသောငွေ: ${fmtAmt(body.amount)}
 
 သင့်လက်ကျန်ငွေသို့ ထည့်သွင်းပေးပြီးပါပြီ။`
           : `❌ *အငြင်းပွားမှု ဖြေရှင်းပြီးပါပြီ*
@@ -268,7 +277,7 @@ ${body.admin_notes ? `📝 အကြောင်းပြချက်: ${body.ad
       case 'deposit_confirmed':
         message = `💰 *ငွေသွင်းမှု အတည်ပြုပြီးပါပြီ!*
 
-ပမာဏ: ${Number(body.amount).toFixed(4)} TON
+ပမာဏ: ${fmtAmt(body.amount)}
 ${body.tx_hash ? `TX Hash: \`${body.tx_hash}\`` : ''}`
         break
 
@@ -283,7 +292,7 @@ ${body.tx_hash ? `TX Hash: \`${body.tx_hash}\`` : ''}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${body.product_title || 'ပစ္စည်း'}*
-💵 ပမာဏ: *${Number(body.amount).toFixed(4)} TON*
+${curIcon} ပမာဏ: *${fmtAmt(body.amount)}*
 👤 ဝယ်သူ: ${body.user_telegram_username ? `@${body.user_telegram_username}` : 'Unknown'}
 🏪 ရောင်းသူ: ${body.seller_username ? `@${body.seller_username}` : 'Unknown'}
 🔗 Link: \`${body.transaction_link || 'N/A'}\`
@@ -312,7 +321,7 @@ ${body.tx_hash ? `TX Hash: \`${body.tx_hash}\`` : ''}`
       case 'admin_new_withdrawal':
         message = `💸 *ငွေထုတ်ယူမှု အသစ်ရောက်ရှိလာပါပြီ!*
 
-💰 ပမာဏ: ${Number(body.amount).toFixed(4)} TON
+${curIcon} ပမာဏ: ${fmtAmt(body.amount)}
 👤 အသုံးပြုသူ: ${body.user_telegram_username ? `@${body.user_telegram_username}` : 'Unknown'}
 📤 Destination: \`${body.destination_wallet?.substring(0, 10)}...${body.destination_wallet?.slice(-6) || 'N/A'}\`
 
@@ -324,7 +333,7 @@ ${body.tx_hash ? `TX Hash: \`${body.tx_hash}\`` : ''}`
 
 ━━━━━━━━━━━━━━━
 📦 ${body.product_title || 'ပစ္စည်း'}
-💰 ပမာဏ: *${Number(body.amount).toFixed(4)} TON*
+${curIcon} ပမာဏ: *${fmtAmt(body.amount)}*
 🛒 ဝယ်သူ: ${body.buyer_username ? `@${body.buyer_username}` : 'Unknown'}
 🏪 ရောင်းသူ: ${body.seller_username ? `@${body.seller_username}` : 'Unknown'}
 ${body.tx_hash ? `🔗 Hash: \`${body.tx_hash.substring(0, 16)}...\`` : ''}
@@ -337,7 +346,7 @@ ${body.tx_hash ? `🔗 Hash: \`${body.tx_hash.substring(0, 16)}...\`` : ''}
         message = `💰 *ငွေသွင်းမှု အသစ်!*
 
 ━━━━━━━━━━━━━━━
-💵 ပမာဏ: *${Number(body.amount).toFixed(4)} TON*
+${curIcon} ပမာဏ: *${fmtAmt(body.amount)}*
 👤 အသုံးပြုသူ: ${body.user_telegram_username ? `@${body.user_telegram_username}` : 'Unknown'}
 🔑 Code: \`${body.unique_code || 'N/A'}\`
 ${body.tx_hash ? `🔗 Hash: \`${body.tx_hash.substring(0, 16)}...\`` : ''}
@@ -351,7 +360,7 @@ ${body.tx_hash ? `🔗 Hash: \`${body.tx_hash.substring(0, 16)}...\`` : ''}
 
 ━━━━━━━━━━━━━━━
 📦 ${body.product_title || 'ပစ္စည်း'}
-💰 ပမာဏ: *${Number(body.amount).toFixed(4)} TON*
+${curIcon} ပမာဏ: *${fmtAmt(body.amount)}*
 🛒 ဝယ်သူ: ${body.buyer_username ? `@${body.buyer_username}` : 'Unknown'}
 🏪 ရောင်းသူ: ${body.seller_username ? `@${body.seller_username}` : 'Unknown'}
 ━━━━━━━━━━━━━━━
