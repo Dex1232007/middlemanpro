@@ -5171,6 +5171,77 @@ Bot ကောင်းစွာအလုပ်လုပ်နေပါသည်!
     return;
   }
 
+  // Dispute chat message forwarding
+  if (state?.action === "dispute_chat" && state.data?.txId) {
+    const txId = String(state.data.txId);
+    const role = String(state.data.role); // "buyer" or "seller"
+    const otherTelegramId = Number(state.data.otherTelegramId);
+    const myProfileId = String(state.data.myProfileId);
+
+    // Verify transaction is still disputed
+    const { data: tx } = await supabase
+      .from("transactions")
+      .select("status")
+      .eq("id", txId)
+      .single();
+
+    if (!tx || tx.status !== "disputed") {
+      await deleteUserState(chatId);
+      await editText(chatId, state.msgId!, "❌ ဤ dispute ပြီးဆုံးသွားပါပြီ", backBtn());
+      await deleteMsg(chatId, inMsgId);
+      return;
+    }
+
+    // Save message to dispute_messages table
+    await supabase.from("dispute_messages").insert({
+      transaction_id: txId,
+      sender_id: myProfileId,
+      sender_role: role,
+      message_text: text.substring(0, 2000),
+    });
+
+    // Forward message to other party
+    if (otherTelegramId) {
+      const roleLabel = role === "buyer" ? "🛒 ဝယ်သူ" : "🏪 ရောင်းသူ";
+      await sendMessage(
+        otherTelegramId,
+        `💬 *Dispute Chat - ${roleLabel}မှ*
+
+━━━━━━━━━━━━━━━━━━━━
+${text.substring(0, 2000)}
+━━━━━━━━━━━━━━━━━━━━
+
+_ပြန်ရေးရန် Dispute Chat ဖွင့်ပါ_`,
+        {
+          inline_keyboard: [
+            [{ text: "💬 Chat ဖွင့်ပြီး ပြန်ရေးမည်", callback_data: `dchat:open:${txId}` }],
+          ],
+        },
+      );
+    }
+
+    // Confirm to sender
+    if (state.msgId) {
+      await editText(
+        chatId,
+        state.msgId,
+        `💬 *Dispute Chat*
+
+✅ Message ပို့ပြီး!
+
+✏️ နောက်ထပ် message ရိုက်ထည့်ပါ
+⚠️ ထွက်ရန် အောက်က ခလုတ်ကို နှိပ်ပါ`,
+        {
+          inline_keyboard: [
+            [{ text: "❌ Chat ပိတ်မည်", callback_data: `dchat:exit:${txId}` }],
+          ],
+        },
+      );
+    }
+    await deleteMsg(chatId, inMsgId);
+    return;
+  }
+
   await showHome(chatId, undefined, username);
 }
 
