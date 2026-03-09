@@ -682,9 +682,15 @@ export default function AdminDeposits() {
                           <div className="flex items-center gap-1">
                             <PaymentMethodBadge method={dep.payment_method} />
                             {dep.screenshot_url && (
-                              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] px-1.5">
-                                📷
-                              </Badge>
+                              <button
+                                onClick={() => setScreenshotPreview(dep.screenshot_url)}
+                                className="inline-flex items-center"
+                                title="Screenshot ကြည့်ရန်"
+                              >
+                                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] px-1.5 cursor-pointer hover:bg-primary/20 transition-colors">
+                                  📷 SS
+                                </Badge>
+                              </button>
                             )}
                           </div>
                         </TableCell>
