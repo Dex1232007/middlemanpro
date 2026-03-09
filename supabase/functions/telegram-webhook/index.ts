@@ -4256,7 +4256,7 @@ async function handleAdminDisputeResolve(
     ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK` 
     : `${Number(tx.amount_ton).toFixed(2)} TON`;
   const sellerReceivesDisplay = isMMK
-    ? `${Number(tx.seller_receives_ton).toLocaleString()} MMK`
+    ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK`
     : `${Number(tx.seller_receives_ton).toFixed(4)} TON`;
   const refundDisplay = isMMK
     ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK`
