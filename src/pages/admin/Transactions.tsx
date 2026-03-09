@@ -80,6 +80,8 @@ export default function AdminTransactions() {
   const [maxAmount, setMaxAmount] = useState<string>('');
   const [ratingFilter, setRatingFilter] = useState<string>('all');
   const [isExporting, setIsExporting] = useState(false);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [paymentScreenshots, setPaymentScreenshots] = useState<Record<string, string>>({});
 
   // Store seller/buyer info for display
   const [profiles, setProfiles] = useState<Record<string, { telegram_username: string | null }>>({});
