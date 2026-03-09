@@ -535,7 +535,7 @@ export default function AdminTransactions() {
                       const buyerUsername = tx.buyer_id ? profiles[tx.buyer_id]?.telegram_username : null;
                       
                       return (
-                        <TableRow key={tx.id}>
+                        <TableRow key={tx.id} className="cursor-pointer" onClick={() => setSelectedTx(tx)}>
                           <TableCell className="font-medium">
                             {format(new Date(tx.created_at), 'yyyy-MM-dd HH:mm')}
                           </TableCell>
