@@ -37,6 +37,9 @@ import {
 } from '@/components/ui/select';
 import { RatingDisplay, RatingSummary } from '@/components/admin/RatingDisplay';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
+import { TransactionStatusBadge } from '@/components/admin/StatusBadge';
 
 type StatusFilter = 'all' | 'active' | 'blocked';
 
