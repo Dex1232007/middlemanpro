@@ -420,13 +420,9 @@ ${mmkMethodIcon} *Payment:* ${mmkMethodName}
       case 'admin_new_mmk_deposit':
         const depMethodName = body.payment_method === 'KBZPAY' ? 'KBZPay' : body.payment_method === 'WAVEPAY' ? 'WavePay' : 'MMK'
         const depMethodIcon = body.payment_method === 'KBZPAY' ? '📱' : '📲'
-        message = `💰 *MMK ငွေသွင်းမှု အသစ်!*
+        const depCaption = `💰 *MMK ငွေသွင်းမှု အသစ်!*
 
-╔══════════════════════════════╗
-║                              ║
-║   ${depMethodIcon} *NEW MMK DEPOSIT*      ║
-║                              ║
-╚══════════════════════════════╝
+${depMethodIcon} *NEW MMK DEPOSIT*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 💵 *ပမာဏ:* ${Number(body.amount).toLocaleString()} MMK
@@ -447,7 +443,13 @@ ${depMethodIcon} *Payment:* ${depMethodName}
               ]
             ]
           }
-          await sendTelegramMessage(telegramId, message, 'Markdown', mmkDepBtns)
+          
+          // Send photo with screenshot if available, otherwise send text
+          if (body.screenshot_url) {
+            await sendTelegramPhoto(telegramId, body.screenshot_url, depCaption, 'Markdown', mmkDepBtns)
+          } else {
+            await sendTelegramMessage(telegramId, depCaption, 'Markdown', mmkDepBtns)
+          }
           
           return new Response(
             JSON.stringify({ success: true }),
