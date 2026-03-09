@@ -330,9 +330,10 @@ export default function AdminTransactions() {
         });
       }
 
+      const statusLabel = newStatus === 'payment_received' ? 'payment_received (စတင်)' : newStatus;
       toast({
         title: actionType === 'confirm' ? '✅ အတည်ပြုပြီးပါပြီ' : '❌ ပယ်ဖျက်ပြီးပါပြီ',
-        description: `Transaction ကို ${actionType === 'confirm' ? 'completed' : 'cancelled'} သို့ပြောင်းပြီးပါပြီ`,
+        description: `Transaction ကို ${statusLabel} သို့ပြောင်းပြီးပါပြီ`,
       });
       
       setActionType(null);
