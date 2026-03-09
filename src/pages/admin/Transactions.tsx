@@ -953,6 +953,31 @@ export default function AdminTransactions() {
                     </div>
                   )}
                 </div>
+
+                {/* Action Buttons - show for active transactions */}
+                {['pending_payment', 'payment_received', 'item_sent', 'disputed'].includes(selectedTx.status) && (
+                  <>
+                    <Separator />
+                    <div className="flex gap-2">
+                      <Button
+                        className="flex-1"
+                        variant="default"
+                        onClick={() => setActionType('confirm')}
+                      >
+                        <CheckCircle className="mr-2 h-4 w-4" />
+                        အတည်ပြု (Complete)
+                      </Button>
+                      <Button
+                        className="flex-1"
+                        variant="destructive"
+                        onClick={() => setActionType('reject')}
+                      >
+                        <XCircle className="mr-2 h-4 w-4" />
+                        ပယ်ဖျက် (Cancel)
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             );
           })()}
