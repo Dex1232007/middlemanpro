@@ -285,7 +285,6 @@ export default function AdminTransactions() {
       const sellerUsername = selectedTx.seller_id ? profiles[selectedTx.seller_id]?.telegram_username : null;
       const buyerUsername = selectedTx.buyer_id ? profiles[selectedTx.buyer_id]?.telegram_username : null;
       const buyerTelegramId = selectedTx.buyer_id ? profiles[selectedTx.buyer_id]?.telegram_id : null;
-      const sellerTelegramId = selectedTx.seller_id ? profiles[selectedTx.seller_id]?.telegram_id : null;
 
       // Notify seller
       if (selectedTx.seller_id) {
