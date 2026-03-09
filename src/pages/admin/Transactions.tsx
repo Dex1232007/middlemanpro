@@ -135,6 +135,20 @@ export default function AdminTransactions() {
       });
       setProfiles(profilesMap);
 
+      // Fetch payment screenshots for transactions
+      const { data: paymentsData } = await supabase
+        .from('payments')
+        .select('id, transaction_id, screenshot_url')
+        .not('screenshot_url', 'is', null);
+
+      const screenshotsMap: Record<string, string> = {};
+      paymentsData?.forEach((p) => {
+        if (p.screenshot_url) {
+          screenshotsMap[p.transaction_id] = p.screenshot_url;
+        }
+      });
+      setPaymentScreenshots(screenshotsMap);
+
       // Map ratings to transactions
       const txWithRatings: TransactionWithRatings[] = (txData || []).map((tx) => ({
         ...tx,
