@@ -570,6 +570,64 @@ ${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${bod
 ⚠️ ပြန်လည်ကြိုးစားလိုပါက ငွေထုတ်ယူမှုအသစ် ပြုလုပ်ပါ။`
         break
 
+      case 'transaction_admin_payment_confirmed': {
+        const isTonPay = body.currency === 'TON'
+
+        // Delete old buyer message if this notification is for buyer
+        if (body.role === 'buyer' && body.buyer_msg_id && body.buyer_telegram_id) {
+          await deleteTelegramMessage(body.buyer_telegram_id, body.buyer_msg_id)
+        }
+
+        if (body.role === 'seller') {
+          message = `✅ *Admin မှ ငွေပေးချေမှု အတည်ပြုပြီးပါပြီ!*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${isTonPay ? `${Number(body.amount).toFixed(4)} TON` : `${Number(body.amount).toLocaleString()} MMK`}
+🛒 *ဝယ်သူ:* ${body.buyer_username ? `@${body.buyer_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${body.admin_notes ? `\n📝 *Admin မှတ်ချက်:* ${body.admin_notes}\n` : ''}
+📦 *ယခု ပစ္စည်းပို့ပေးပါ*`;
+
+          const sellerPayKb = {
+            inline_keyboard: [
+              [
+                { text: '📦 ပို့ပြီး', callback_data: `a:sent:${body.transaction_id || ''}` },
+                { text: '❌ ပယ်ဖျက်', callback_data: `a:cancel:${body.transaction_id || ''}` },
+              ],
+              ...(body.buyer_username ? [[{ text: '💬 ဝယ်သူနဲ့ Chat', url: `https://t.me/${body.buyer_username}` }]] : []),
+            ]
+          }
+
+          await sendTelegramMessage(telegramId, message, 'Markdown', sellerPayKb)
+          return new Response(
+            JSON.stringify({ success: true }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        } else {
+          message = `✅ *Admin မှ ငွေပေးချေမှု အတည်ပြုပြီးပါပြီ!*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${isTonPay ? `${Number(body.amount).toFixed(4)} TON` : `${Number(body.amount).toLocaleString()} MMK`}
+🏪 *ရောင်းသူ:* ${body.seller_username ? `@${body.seller_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${body.admin_notes ? `\n📝 *Admin မှတ်ချက်:* ${body.admin_notes}\n` : ''}
+⏳ ရောင်းသူမှ ပစ္စည်းပို့ရန် စောင့်ပါ`;
+
+          const buyerPayKb = {
+            inline_keyboard: [
+              ...(body.seller_username ? [[{ text: '💬 ရောင်းသူနဲ့ Chat', url: `https://t.me/${body.seller_username}` }]] : []),
+              [{ text: '🏠 ပင်မစာမျက်နှာ', callback_data: 'm:home' }],
+            ]
+          }
+
+          await sendTelegramMessage(telegramId, message, 'Markdown', buyerPayKb)
+          return new Response(
+            JSON.stringify({ success: true }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
+
       case 'transaction_admin_completed': {
         const isTonComp = body.currency === 'TON'
         
