@@ -5029,8 +5029,39 @@ async function handleMessage(msg: {
     return;
   }
 
-  // Commands
+  // Check if username is set (required to use bot)
+  if (!username) {
+    const noUsernameMsg = `⚠️ *Username လိုအပ်ပါသည်*
+
+╔══════════════════════════════╗
+║                              ║
+║   📛 *USERNAME REQUIRED*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Bot အသုံးပြုရန် Telegram Username 
+သတ်မှတ်ထားရန် လိုအပ်ပါသည်။
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📱 *သတ်မှတ်နည်း:*
+Telegram Settings → Edit Profile → Username
+
+✅ Username သတ်မှတ်ပြီးပါက /start ပြန်နှိပ်ပါ။`;
+    await sendMessage(chatId, noUsernameMsg);
+    return;
+  }
+
+  // Check terms acceptance for /start command
   if (text === "/start" || text.startsWith("/start ")) {
+    const profile = await getProfile(chatId, username);
+    
+    // If terms not accepted, show terms first
+    if (!profile.terms_accepted_at) {
+      await showTermsAndConditions(chatId, username);
+      return;
+    }
+    
     const parts = text.split(" ");
     if (parts[1]?.startsWith("buy_")) {
       await handleBuyLink(chatId, parts[1].replace("buy_", ""), username);
