@@ -324,15 +324,10 @@ export default function AdminUsers() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <button 
-                            onClick={() => openProfileDialog(user)}
-                            className="hover:opacity-80 transition-opacity cursor-pointer"
-                          >
-                            <RatingSummary 
-                              avgRating={user.avg_rating ?? null} 
-                              totalRatings={user.total_ratings ?? null} 
-                            />
-                          </button>
+                          <RatingSummary 
+                            avgRating={user.avg_rating ?? null} 
+                            totalRatings={user.total_ratings ?? null} 
+                          />
                         </TableCell>
                         <TableCell>
                           {user.ton_wallet_address ? (
