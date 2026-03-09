@@ -4248,6 +4248,20 @@ async function handleAdminDisputeResolve(
     return;
   }
 
+  // Currency-aware display for dispute resolution
+  const txCurrency = tx.currency || "TON";
+  const isMMK = txCurrency === "MMK";
+  const dIcon = isMMK ? "💵" : "💎";
+  const dAmountDisplay = isMMK 
+    ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK` 
+    : `${Number(tx.amount_ton).toFixed(2)} TON`;
+  const sellerReceivesDisplay = isMMK
+    ? `${Number(tx.seller_receives_ton).toLocaleString()} MMK`
+    : `${Number(tx.seller_receives_ton).toFixed(4)} TON`;
+  const refundDisplay = isMMK
+    ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK`
+    : `${Number(tx.amount_ton).toFixed(4)} TON`;
+
   if (resolution === "completed") {
     // Resolve in favor of seller - credit seller and complete transaction
     await supabase
@@ -4258,10 +4272,17 @@ async function handleAdminDisputeResolve(
       })
       .eq("id", tx.id);
 
-    // Credit seller
+    // Credit seller with correct currency
     if (tx.seller) {
-      const newBal = Number(tx.seller.balance) + Number(tx.seller_receives_ton);
-      await supabase.from("profiles").update({ balance: newBal }).eq("id", tx.seller.id);
+      let newBal: number;
+      if (isMMK) {
+        const creditAmount = Number(tx.amount_mmk || 0);
+        newBal = Number(tx.seller.balance_mmk || 0) + creditAmount;
+        await supabase.from("profiles").update({ balance_mmk: newBal }).eq("id", tx.seller.id);
+      } else {
+        newBal = Number(tx.seller.balance) + Number(tx.seller_receives_ton);
+        await supabase.from("profiles").update({ balance: newBal }).eq("id", tx.seller.id);
+      }
 
       // Notify seller
       if (tx.seller.telegram_id) {
@@ -4277,7 +4298,7 @@ async function handleAdminDisputeResolve(
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💰 ရရှိသောငွေ: *+${Number(tx.seller_receives_ton).toFixed(4)} TON*
+💰 ရရှိသောငွေ: *+${sellerReceivesDisplay}*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
 💳 သင့် Balance သို့ ထည့်သွင်းပြီးပါပြီ
@@ -4301,7 +4322,7 @@ async function handleAdminDisputeResolve(
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *${tx.amount_ton} TON*
+${dIcon} *${dAmountDisplay}*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📋 Admin ဆုံးဖြတ်ချက်: ရောင်းသူထံ ငွေလွှဲပြီးပါပြီ
@@ -4325,10 +4346,10 @@ async function handleAdminDisputeResolve(
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *${tx.amount_ton} TON*
+${dIcon} *${dAmountDisplay}*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💰 ရောင်းသူထံ *${Number(tx.seller_receives_ton).toFixed(4)} TON* လွှဲပြီးပါပြီ
+💰 ရောင်းသူထံ *${sellerReceivesDisplay}* လွှဲပြီးပါပြီ
 ✅ ဝယ်သူ နှင့် ရောင်းသူ နှစ်ဦးလုံးကို အကြောင်းကြားပြီးပါပြီ`,
     );
   } else {
@@ -4340,10 +4361,17 @@ async function handleAdminDisputeResolve(
       })
       .eq("id", tx.id);
 
-    // Refund buyer's balance
+    // Refund buyer's balance with correct currency
     if (tx.buyer) {
-      const newBal = Number(tx.buyer.balance) + Number(tx.amount_ton);
-      await supabase.from("profiles").update({ balance: newBal }).eq("id", tx.buyer.id);
+      let newBal: number;
+      if (isMMK) {
+        const refundAmount = Number(tx.amount_mmk || 0);
+        newBal = Number(tx.buyer.balance_mmk || 0) + refundAmount;
+        await supabase.from("profiles").update({ balance_mmk: newBal }).eq("id", tx.buyer.id);
+      } else {
+        newBal = Number(tx.buyer.balance) + Number(tx.amount_ton);
+        await supabase.from("profiles").update({ balance: newBal }).eq("id", tx.buyer.id);
+      }
 
       // Notify buyer
       if (tx.buyer.telegram_id) {
@@ -4359,7 +4387,7 @@ async function handleAdminDisputeResolve(
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💰 ပြန်အမ်းငွေ: *+${Number(tx.amount_ton).toFixed(4)} TON*
+💰 ပြန်အမ်းငွေ: *+${refundDisplay}*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
 💳 သင့် Balance သို့ ပြန်ထည့်ပေးပြီးပါပြီ
@@ -4383,7 +4411,7 @@ async function handleAdminDisputeResolve(
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *${tx.amount_ton} TON*
+${dIcon} *${dAmountDisplay}*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📋 Admin ဆုံးဖြတ်ချက်: ဝယ်သူထံ ငွေပြန်အမ်းပြီးပါပြီ
@@ -4407,10 +4435,10 @@ async function handleAdminDisputeResolve(
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 *${tx.products?.title}*
-💵 *${tx.amount_ton} TON*
+${dIcon} *${dAmountDisplay}*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💰 ဝယ်သူထံ *${Number(tx.amount_ton).toFixed(4)} TON* ပြန်အမ်းပြီးပါပြီ
+💰 ဝယ်သူထံ *${refundDisplay}* ပြန်အမ်းပြီးပါပြီ
 ✅ ဝယ်သူ နှင့် ရောင်းသူ နှစ်ဦးလုံးကို အကြောင်းကြားပြီးပါပြီ`,
     );
   }
