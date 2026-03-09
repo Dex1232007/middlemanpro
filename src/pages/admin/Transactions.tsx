@@ -281,6 +281,8 @@ export default function AdminTransactions() {
       // Notify both seller and buyer via Telegram
       const sellerUsername = selectedTx.seller_id ? profiles[selectedTx.seller_id]?.telegram_username : null;
       const buyerUsername = selectedTx.buyer_id ? profiles[selectedTx.buyer_id]?.telegram_username : null;
+      const buyerTelegramId = selectedTx.buyer_id ? profiles[selectedTx.buyer_id]?.telegram_id : null;
+      const sellerTelegramId = selectedTx.seller_id ? profiles[selectedTx.seller_id]?.telegram_id : null;
 
       // Notify seller
       if (selectedTx.seller_id) {
@@ -296,11 +298,12 @@ export default function AdminTransactions() {
             seller_username: sellerUsername,
             seller_receives: Number(selectedTx.seller_receives_ton),
             role: 'seller',
+            transaction_id: selectedTx.id,
           }
         });
       }
 
-      // Notify buyer
+      // Notify buyer (delete old message and send new one with inline keyboard)
       if (selectedTx.buyer_id) {
         await supabase.functions.invoke('notify-user', {
           body: {
@@ -313,6 +316,9 @@ export default function AdminTransactions() {
             buyer_username: buyerUsername,
             seller_username: sellerUsername,
             role: 'buyer',
+            transaction_id: selectedTx.id,
+            buyer_msg_id: selectedTx.buyer_msg_id ? Number(selectedTx.buyer_msg_id) : undefined,
+            buyer_telegram_id: buyerTelegramId ? Number(buyerTelegramId) : undefined,
           }
         });
       }
