@@ -41,7 +41,9 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import type { Transaction, TransactionStatus } from '@/types/database';
 import { Skeleton } from '@/components/ui/skeleton';
