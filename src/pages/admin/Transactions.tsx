@@ -513,6 +513,7 @@ export default function AdminTransactions() {
                     <TableHead>{getAmountLabel()}</TableHead>
                     <TableHead>ကော်မရှင်</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>📷</TableHead>
                     <TableHead>Rating</TableHead>
                     {currencyTab !== 'MMK' && <TableHead>TX Hash</TableHead>}
                     <TableHead className="text-right">Link</TableHead>
