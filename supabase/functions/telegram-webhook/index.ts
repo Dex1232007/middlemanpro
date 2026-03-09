@@ -5606,6 +5606,83 @@ async function handleCallback(cb: {
     return;
   }
 
+  // Dispute chat callbacks: dchat:open|exit:<txId>
+  if (type === "dchat") {
+    if (action === "open") {
+      await answerCb(cb.id);
+      // Verify user is buyer or seller of this disputed transaction
+      const { data: tx } = await supabase
+        .from("transactions")
+        .select("*, products(title), buyer:profiles!transactions_buyer_id_fkey(id, telegram_id, telegram_username), seller:profiles!transactions_seller_id_fkey(id, telegram_id, telegram_username)")
+        .eq("id", id)
+        .eq("status", "disputed")
+        .single();
+
+      if (!tx) {
+        await editText(chatId, msgId, "❌ ဤ dispute ရှာမတွေ့ပါ သို့မဟုတ် ပြီးဆုံးသွားပါပြီ", backBtn());
+        return;
+      }
+
+      const isBuyer = tx.buyer?.telegram_id === telegramId;
+      const isSeller = tx.seller?.telegram_id === telegramId;
+      if (!isBuyer && !isSeller) {
+        await editText(chatId, msgId, "❌ သင်သည် ဤရောင်းဝယ်မှု၏ ဝယ်သူ/ရောင်းသူ မဟုတ်ပါ", backBtn());
+        return;
+      }
+
+      const role = isBuyer ? "buyer" : "seller";
+      const otherParty = isBuyer ? tx.seller?.telegram_username : tx.buyer?.telegram_username;
+
+      await setUserState(chatId, {
+        action: "dispute_chat",
+        msgId,
+        data: { txId: id, role, otherTelegramId: isBuyer ? tx.seller?.telegram_id : tx.buyer?.telegram_id, otherProfileId: isBuyer ? tx.seller?.id : tx.buyer?.id, myProfileId: isBuyer ? tx.buyer?.id : tx.seller?.id },
+      });
+
+      await editText(
+        chatId,
+        msgId,
+        `💬 *Dispute Chat*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${tx.products?.title}*
+👤 *${isBuyer ? "ရောင်းသူ" : "ဝယ်သူ"}:* @${otherParty || "Unknown"}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✏️ သင့် message ကို ရိုက်ထည့်ပါ။
+📨 အဖက်သားထံ ဘော့မှတဆင့် ပေးပို့ပေးပါမည်။
+🔍 Admin မှလည်း Chat မှတ်တမ်း ကြည့်ရှုနိုင်ပါသည်။
+
+⚠️ ထွက်ရန် အောက်က ခလုတ်ကို နှိပ်ပါ`,
+        {
+          inline_keyboard: [
+            [{ text: "❌ Chat ပိတ်မည်", callback_data: `dchat:exit:${id}` }],
+          ],
+        },
+      );
+      return;
+    }
+
+    if (action === "exit") {
+      await answerCb(cb.id, "💬 Chat ပိတ်ပြီး");
+      await deleteUserState(chatId);
+      await editText(
+        chatId,
+        msgId,
+        `✅ *Dispute Chat ပိတ်ပြီး*
+
+ပင်မစာမျက်နှာသို့ ပြန်သွားနိုင်ပါသည်`,
+        {
+          inline_keyboard: [
+            [{ text: "💬 Chat ပြန်ဖွင့်မည်", callback_data: `dchat:open:${id}` }],
+            [{ text: "🏠 ပင်မစာမျက်နှာ", callback_data: "m:home" }],
+          ],
+        },
+      );
+      return;
+    }
+  }
+
   // Buy with balance callback: buy:bal:<txId>
   if (type === "buy" && action === "bal") {
     await handleBuyWithBalance(chatId, msgId, id, cb.id, telegramId, username);
