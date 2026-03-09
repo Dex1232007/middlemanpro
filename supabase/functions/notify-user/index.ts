@@ -82,6 +82,8 @@ interface NotifyRequest {
   payment_id?: string
   transaction_id?: string
   screenshot_url?: string
+  seller_receives?: number
+  role?: 'seller' | 'buyer'
 }
 
 async function verifyAdminAuth(req: Request): Promise<{ authorized: boolean; error?: string }> {
