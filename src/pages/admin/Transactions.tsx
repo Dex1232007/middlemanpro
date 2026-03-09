@@ -140,11 +140,11 @@ export default function AdminTransactions() {
       // Fetch profiles for seller/buyer info
       const { data: profilesData } = await supabase
         .from('profiles')
-        .select('id, telegram_username');
+        .select('id, telegram_username, telegram_id');
 
-      const profilesMap: Record<string, { telegram_username: string | null }> = {};
+      const profilesMap: Record<string, { telegram_username: string | null; telegram_id: number | null }> = {};
       profilesData?.forEach((p) => {
-        profilesMap[p.id] = { telegram_username: p.telegram_username };
+        profilesMap[p.id] = { telegram_username: p.telegram_username, telegram_id: p.telegram_id };
       });
       setProfiles(profilesMap);
 
