@@ -92,6 +92,48 @@ export type Database = {
           },
         ]
       }
+      dispute_messages: {
+        Row: {
+          created_at: string
+          id: string
+          message_text: string
+          sender_id: string | null
+          sender_role: Database["public"]["Enums"]["dispute_sender_role"]
+          transaction_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_text: string
+          sender_id?: string | null
+          sender_role: Database["public"]["Enums"]["dispute_sender_role"]
+          transaction_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_text?: string
+          sender_id?: string | null
+          sender_role?: Database["public"]["Enums"]["dispute_sender_role"]
+          transaction_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispute_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dispute_messages_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_methods: {
         Row: {
           account_info: string | null
@@ -698,6 +740,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      dispute_sender_role: "buyer" | "seller" | "admin"
       transaction_status:
         | "pending_payment"
         | "payment_received"
@@ -834,6 +877,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      dispute_sender_role: ["buyer", "seller", "admin"],
       transaction_status: [
         "pending_payment",
         "payment_received",
