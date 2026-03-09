@@ -321,7 +321,7 @@ ${curIcon} ပမာဏ: *${fmtAmt(body.amount)}*
       case 'admin_new_withdrawal':
         message = `💸 *ငွေထုတ်ယူမှု အသစ်ရောက်ရှိလာပါပြီ!*
 
-💰 ပမာဏ: ${Number(body.amount).toFixed(4)} TON
+${curIcon} ပမာဏ: ${fmtAmt(body.amount)}
 👤 အသုံးပြုသူ: ${body.user_telegram_username ? `@${body.user_telegram_username}` : 'Unknown'}
 📤 Destination: \`${body.destination_wallet?.substring(0, 10)}...${body.destination_wallet?.slice(-6) || 'N/A'}\`
 
@@ -333,7 +333,7 @@ ${curIcon} ပမာဏ: *${fmtAmt(body.amount)}*
 
 ━━━━━━━━━━━━━━━
 📦 ${body.product_title || 'ပစ္စည်း'}
-💰 ပမာဏ: *${Number(body.amount).toFixed(4)} TON*
+${curIcon} ပမာဏ: *${fmtAmt(body.amount)}*
 🛒 ဝယ်သူ: ${body.buyer_username ? `@${body.buyer_username}` : 'Unknown'}
 🏪 ရောင်းသူ: ${body.seller_username ? `@${body.seller_username}` : 'Unknown'}
 ${body.tx_hash ? `🔗 Hash: \`${body.tx_hash.substring(0, 16)}...\`` : ''}
@@ -346,7 +346,7 @@ ${body.tx_hash ? `🔗 Hash: \`${body.tx_hash.substring(0, 16)}...\`` : ''}
         message = `💰 *ငွေသွင်းမှု အသစ်!*
 
 ━━━━━━━━━━━━━━━
-💵 ပမာဏ: *${Number(body.amount).toFixed(4)} TON*
+${curIcon} ပမာဏ: *${fmtAmt(body.amount)}*
 👤 အသုံးပြုသူ: ${body.user_telegram_username ? `@${body.user_telegram_username}` : 'Unknown'}
 🔑 Code: \`${body.unique_code || 'N/A'}\`
 ${body.tx_hash ? `🔗 Hash: \`${body.tx_hash.substring(0, 16)}...\`` : ''}
@@ -360,7 +360,7 @@ ${body.tx_hash ? `🔗 Hash: \`${body.tx_hash.substring(0, 16)}...\`` : ''}
 
 ━━━━━━━━━━━━━━━
 📦 ${body.product_title || 'ပစ္စည်း'}
-💰 ပမာဏ: *${Number(body.amount).toFixed(4)} TON*
+${curIcon} ပမာဏ: *${fmtAmt(body.amount)}*
 🛒 ဝယ်သူ: ${body.buyer_username ? `@${body.buyer_username}` : 'Unknown'}
 🏪 ရောင်းသူ: ${body.seller_username ? `@${body.seller_username}` : 'Unknown'}
 ━━━━━━━━━━━━━━━
