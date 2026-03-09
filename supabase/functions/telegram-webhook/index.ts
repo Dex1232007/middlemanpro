@@ -881,6 +881,51 @@ ${t(lang, "welcome.tagline")}
 
 // Helper functions removed - now using only inline keyboards
 
+// Show terms and conditions
+async function showTermsAndConditions(chatId: number, username?: string) {
+  const termsText = `📜 *စည်းမျဉ်းစည်းကမ်းများ*
+
+╔══════════════════════════════╗
+║                              ║
+║  📋 *TERMS & CONDITIONS*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔐 *Escrow Bot အသုံးပြုရန် သဘောတူရမည့်အချက်များ:*
+
+1️⃣ *အထောက်အထား စစ်မှန်ရမည်*
+   • Telegram Username ရှိရမည်
+   • လိမ်လည်မှု မပြုလုပ်ရ
+
+2️⃣ *လိမ်လည်ခြင်း တားမြစ်ချက်*
+   • ပစ္စည်းမပို့ဘဲ ငွေယူခြင်း
+   • အတုအယောင် screenshot သုံးခြင်း
+   • အခြားသူများကို လှည့်ဖြားခြင်း
+
+⚠️ *ချိုးဖောက်ပါက:*
+   • အကောင့် အပြီးအပိုင် ပိတ်မည်
+   • လက်ကျန်ငွေ သိမ်းဆည်းမည်
+   • တရားဥပဒေအရ အရေးယူနိုင်သည်
+
+3️⃣ *ရောင်းဝယ်မှု စည်းကမ်းများ*
+   • ပစ္စည်းရရှိမှသာ Confirm နှိပ်ပါ
+   • ပြဿနာရှိပါက Dispute တင်ပါ
+   • Commission 5% ကျသင့်မည်
+
+4️⃣ *ငွေထုတ်ယူခြင်း*
+   • မိမိပိုင် Wallet/Account သာ သုံးပါ
+   • မှားယွင်းလွှဲမှုကို ပြန်မရနိုင်ပါ
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ အထက်ပါ စည်းကမ်းများကို ဖတ်ရှုနားလည်ပြီး 
+   သဘောတူပါက "လက်ခံပါသည်" ခလုပ်နှိပ်ပါ။`;
+
+  await sendMessage(chatId, termsText, termsAcceptBtn("my"));
+}
+
 async function showHelp(chatId: number, msgId: number) {
   const text = `📖 *အကူအညီ*
 
