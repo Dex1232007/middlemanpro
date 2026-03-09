@@ -2168,71 +2168,110 @@ async function showOrders(chatId: number, msgId: number, username?: string) {
   await editText(chatId, msgId, text, { inline_keyboard: btns });
 }
 
-// ==================== TRANSACTION HISTORY ====================
-async function showHistory(chatId: number, msgId: number, username?: string) {
+// ==================== TRANSACTION HISTORY (with Pagination) ====================
+const HISTORY_PAGE_SIZE = 5;
+
+async function showHistory(chatId: number, msgId: number, username?: string, page = 0, type: 'all' | 'sold' | 'bought' = 'all') {
   const profile = await getProfile(chatId, username);
+  const lang = (profile.language || "my") as Language;
+  const offset = page * HISTORY_PAGE_SIZE;
 
-  // Get completed/cancelled transactions
-  const { data: sellerTxs } = await supabase
+  // Get total counts for pagination
+  const { count: totalSoldCount } = await supabase
     .from("transactions")
-    .select("*, products(*), buyer:profiles!transactions_buyer_id_fkey(telegram_username, avg_rating, total_ratings)")
+    .select("id", { count: "exact", head: true })
     .eq("seller_id", profile.id)
-    .in("status", ["completed", "cancelled"])
-    .order("created_at", { ascending: false })
-    .limit(10);
+    .in("status", ["completed", "cancelled"]);
 
-  const { data: buyerTxs } = await supabase
+  const { count: totalBoughtCount } = await supabase
     .from("transactions")
-    .select("*, products(*), seller:profiles!transactions_seller_id_fkey(telegram_username, avg_rating, total_ratings)")
+    .select("id", { count: "exact", head: true })
     .eq("buyer_id", profile.id)
-    .in("status", ["completed", "cancelled"])
-    .order("created_at", { ascending: false })
-    .limit(10);
+    .in("status", ["completed", "cancelled"]);
 
-  if (!sellerTxs?.length && !buyerTxs?.length) {
+  const totalSold = totalSoldCount || 0;
+  const totalBought = totalBoughtCount || 0;
+  const totalAll = totalSold + totalBought;
+
+  if (totalAll === 0) {
     await editText(
       chatId,
       msgId,
-      `📭 *မှတ်တမ်း မရှိသေးပါ*
+      `📭 *${lang === 'en' ? 'No History' : 'မှတ်တမ်း မရှိသေးပါ'}*
 
-ပြီးဆုံးသော အရောင်းအဝယ်များ ဤနေရာတွင် ပြပါမည်`,
-      backBtn(),
+${lang === 'en' ? 'Completed transactions will appear here' : 'ပြီးဆုံးသော အရောင်းအဝယ်များ ဤနေရာတွင် ပြပါမည်'}`,
+      backBtn(lang),
     );
     return;
   }
 
-  let text = `📜 *ကျွန်ုပ်၏ မှတ်တမ်း*\n\n`;
-  let totalSold = 0;
-  let totalBought = 0;
+  // Determine which data to fetch based on type
+  let transactions: any[] = [];
+  let totalCount = 0;
 
-  if (sellerTxs?.length) {
-    text += `━━━ 📤 *ရောင်းခဲ့သည်* ━━━\n\n`;
-    for (const tx of sellerTxs) {
-      const isMMK = tx.currency === "MMK";
-      const amountStr = isMMK
-        ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK`
-        : `${Number(tx.amount_ton).toFixed(2)} TON`;
-      const receivesStr = isMMK
-        ? `${Number(tx.seller_receives_ton).toLocaleString()} MMK`
-        : `${Number(tx.seller_receives_ton).toFixed(2)} TON`;
-      const date = new Date(tx.created_at).toLocaleDateString("my-MM");
-      const statusIcon = tx.status === "completed" ? "✅" : "❌";
-      const icon = isMMK ? "💵" : "💎";
-      const buyerRating = tx.buyer?.avg_rating ? ` ⭐${tx.buyer.avg_rating}` : "";
-      const buyerName = tx.buyer?.telegram_username ? `@${tx.buyer.telegram_username}` : "Unknown";
-      
-      text += `${statusIcon} *${tx.products?.title}*\n`;
-      text += `${icon} ${amountStr} → 💰 ${receivesStr}\n`;
-      text += `👤 ဝယ်သူ: ${buyerName}${buyerRating}\n`;
-      text += `📅 ${date}\n\n`;
-      
-      if (tx.status === "completed") totalSold++;
-    }
+  if (type === 'sold') {
+    totalCount = totalSold;
+    const { data } = await supabase
+      .from("transactions")
+      .select("*, products(*), buyer:profiles!transactions_buyer_id_fkey(telegram_username, avg_rating, total_ratings)")
+      .eq("seller_id", profile.id)
+      .in("status", ["completed", "cancelled"])
+      .order("created_at", { ascending: false })
+      .range(offset, offset + HISTORY_PAGE_SIZE - 1);
+    transactions = (data || []).map(tx => ({ ...tx, role: 'seller' }));
+  } else if (type === 'bought') {
+    totalCount = totalBought;
+    const { data } = await supabase
+      .from("transactions")
+      .select("*, products(*), seller:profiles!transactions_seller_id_fkey(telegram_username, avg_rating, total_ratings)")
+      .eq("buyer_id", profile.id)
+      .in("status", ["completed", "cancelled"])
+      .order("created_at", { ascending: false })
+      .range(offset, offset + HISTORY_PAGE_SIZE - 1);
+    transactions = (data || []).map(tx => ({ ...tx, role: 'buyer' }));
+  } else {
+    // All - merge both seller and buyer transactions
+    totalCount = totalAll;
+    const { data: sellerTxs } = await supabase
+      .from("transactions")
+      .select("*, products(*), buyer:profiles!transactions_buyer_id_fkey(telegram_username, avg_rating, total_ratings)")
+      .eq("seller_id", profile.id)
+      .in("status", ["completed", "cancelled"])
+      .order("created_at", { ascending: false });
+
+    const { data: buyerTxs } = await supabase
+      .from("transactions")
+      .select("*, products(*), seller:profiles!transactions_seller_id_fkey(telegram_username, avg_rating, total_ratings)")
+      .eq("buyer_id", profile.id)
+      .in("status", ["completed", "cancelled"])
+      .order("created_at", { ascending: false });
+
+    const allTxs = [
+      ...(sellerTxs || []).map(tx => ({ ...tx, role: 'seller' })),
+      ...(buyerTxs || []).map(tx => ({ ...tx, role: 'buyer' })),
+    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    transactions = allTxs.slice(offset, offset + HISTORY_PAGE_SIZE);
   }
 
-  if (buyerTxs?.length) {
-    text += `━━━ 📥 *ဝယ်ခဲ့သည်* ━━━\n\n`;
-    for (const tx of buyerTxs) {
+  const totalPages = Math.ceil(totalCount / HISTORY_PAGE_SIZE);
+  const currentPage = page + 1;
+
+  // Build message text
+  const typeLabels = {
+    all: lang === 'en' ? 'All' : 'အားလုံး',
+    sold: lang === 'en' ? 'Sold' : 'ရောင်းခဲ့သည်',
+    bought: lang === 'en' ? 'Bought' : 'ဝယ်ခဲ့သည်',
+  };
+
+  let text = `📜 *${lang === 'en' ? 'Transaction History' : 'မှတ်တမ်း'}*\n\n`;
+  text += `📊 *${typeLabels[type]}* | ${lang === 'en' ? 'Page' : 'စာမျက်နှာ'} ${currentPage}/${totalPages}\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+  if (transactions.length === 0) {
+    text += `${lang === 'en' ? 'No records on this page' : 'ဤစာမျက်နှာတွင် မှတ်တမ်းမရှိပါ'}\n\n`;
+  } else {
+    for (const tx of transactions) {
       const isMMK = tx.currency === "MMK";
       const amountStr = isMMK
         ? `${Number(tx.amount_mmk || 0).toLocaleString()} MMK`
@@ -2240,22 +2279,84 @@ async function showHistory(chatId: number, msgId: number, username?: string) {
       const date = new Date(tx.created_at).toLocaleDateString("my-MM");
       const statusIcon = tx.status === "completed" ? "✅" : "❌";
       const icon = isMMK ? "💵" : "💎";
-      const sellerRating = tx.seller?.avg_rating ? ` ⭐${tx.seller.avg_rating}` : "";
-      const sellerName = tx.seller?.telegram_username ? `@${tx.seller.telegram_username}` : "Unknown";
+      const roleIcon = tx.role === 'seller' ? "📤" : "📥";
+      const roleText = tx.role === 'seller' 
+        ? (lang === 'en' ? 'Sold' : 'ရောင်း')
+        : (lang === 'en' ? 'Bought' : 'ဝယ်');
+
+      const productTitle = tx.products?.title || 'Unknown';
       
-      text += `${statusIcon} *${tx.products?.title}*\n`;
-      text += `${icon} ${amountStr}\n`;
-      text += `🏪 ရောင်းသူ: ${sellerName}${sellerRating}\n`;
-      text += `📅 ${date}\n\n`;
-      
-      if (tx.status === "completed") totalBought++;
+      if (tx.role === 'seller') {
+        const receivesStr = isMMK
+          ? `${Number(tx.seller_receives_ton).toLocaleString()} MMK`
+          : `${Number(tx.seller_receives_ton).toFixed(2)} TON`;
+        const buyerRating = tx.buyer?.avg_rating ? ` ⭐${tx.buyer.avg_rating}` : "";
+        const buyerName = tx.buyer?.telegram_username ? `@${tx.buyer.telegram_username}` : "Unknown";
+        
+        text += `${statusIcon} ${roleIcon} *${productTitle}*\n`;
+        text += `${icon} ${amountStr} → 💰 ${receivesStr}\n`;
+        text += `👤 ${lang === 'en' ? 'Buyer' : 'ဝယ်သူ'}: ${buyerName}${buyerRating}\n`;
+        text += `📅 ${date} | ${roleText}\n\n`;
+      } else {
+        const sellerRating = tx.seller?.avg_rating ? ` ⭐${tx.seller.avg_rating}` : "";
+        const sellerName = tx.seller?.telegram_username ? `@${tx.seller.telegram_username}` : "Unknown";
+        
+        text += `${statusIcon} ${roleIcon} *${productTitle}*\n`;
+        text += `${icon} ${amountStr}\n`;
+        text += `🏪 ${lang === 'en' ? 'Seller' : 'ရောင်းသူ'}: ${sellerName}${sellerRating}\n`;
+        text += `📅 ${date} | ${roleText}\n\n`;
+      }
     }
   }
 
   text += `━━━━━━━━━━━━━━━━━━━━\n`;
-  text += `📊 *စုစုပေါင်း:* ✅ ရောင်း ${totalSold} ခု | ✅ ဝယ် ${totalBought} ခု`;
+  text += `📊 *${lang === 'en' ? 'Total' : 'စုစုပေါင်း'}:* ✅ ${lang === 'en' ? 'Sold' : 'ရောင်း'} ${totalSold} | ✅ ${lang === 'en' ? 'Bought' : 'ဝယ်'} ${totalBought}`;
 
-  await editText(chatId, msgId, text, backBtn());
+  // Build pagination keyboard
+  const btns: { text: string; callback_data: string }[][] = [];
+
+  // Filter buttons row
+  btns.push([
+    { text: `${type === 'all' ? '✓ ' : ''}${lang === 'en' ? 'All' : 'အားလုံး'}`, callback_data: `hist:all:0` },
+    { text: `${type === 'sold' ? '✓ ' : ''}📤 ${lang === 'en' ? 'Sold' : 'ရောင်း'}`, callback_data: `hist:sold:0` },
+    { text: `${type === 'bought' ? '✓ ' : ''}📥 ${lang === 'en' ? 'Bought' : 'ဝယ်'}`, callback_data: `hist:bought:0` },
+  ]);
+
+  // Pagination navigation row
+  const navBtns: { text: string; callback_data: string }[] = [];
+  
+  if (page > 0) {
+    navBtns.push({ text: `⬅️ ${lang === 'en' ? 'Prev' : 'ယခင်'}`, callback_data: `hist:${type}:${page - 1}` });
+  }
+  
+  navBtns.push({ text: `📄 ${currentPage}/${totalPages}`, callback_data: `hist:${type}:${page}` });
+  
+  if (currentPage < totalPages) {
+    navBtns.push({ text: `${lang === 'en' ? 'Next' : 'နောက်'} ➡️`, callback_data: `hist:${type}:${page + 1}` });
+  }
+  
+  if (navBtns.length > 0) {
+    btns.push(navBtns);
+  }
+
+  // Quick jump buttons for many pages
+  if (totalPages > 3) {
+    const jumpBtns: { text: string; callback_data: string }[] = [];
+    if (page !== 0) {
+      jumpBtns.push({ text: `⏮️ ${lang === 'en' ? 'First' : 'ပထမ'}`, callback_data: `hist:${type}:0` });
+    }
+    if (currentPage !== totalPages) {
+      jumpBtns.push({ text: `${lang === 'en' ? 'Last' : 'နောက်ဆုံး'} ⏭️`, callback_data: `hist:${type}:${totalPages - 1}` });
+    }
+    if (jumpBtns.length > 0) {
+      btns.push(jumpBtns);
+    }
+  }
+
+  // Home button
+  btns.push([{ text: `🏠 ${lang === 'en' ? 'Home' : 'ပင်မ'}`, callback_data: "m:home" }]);
+
+  await editText(chatId, msgId, text, { inline_keyboard: btns });
 }
 
 // ==================== MY SALES LINKS ====================
