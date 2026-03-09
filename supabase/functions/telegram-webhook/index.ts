@@ -5506,6 +5506,23 @@ async function handleCallback(cb: {
 
   const [type, action, id] = data.split(":");
 
+  // Terms acceptance callback
+  if (type === "terms" && action === "accept") {
+    await answerCb(cb.id, "✅ စည်းကမ်းများ လက်ခံပြီး!");
+    
+    // Update profile with terms accepted timestamp
+    const profile = await getProfile(telegramId, username);
+    await supabase
+      .from("profiles")
+      .update({ terms_accepted_at: new Date().toISOString() })
+      .eq("id", profile.id);
+    
+    // Delete terms message and show home
+    await deleteMsg(chatId, msgId);
+    await showHome(chatId, undefined, username);
+    return;
+  }
+
   // Menu
   if (type === "m") {
     await answerCb(cb.id);
