@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { Search, RefreshCw, ExternalLink, Download, Calendar, Filter, Star } from 'lucide-react';
+import { Search, RefreshCw, ExternalLink, Download, Calendar, Filter, Star, Eye } from 'lucide-react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { TransactionStatusBadge } from '@/components/admin/StatusBadge';
 import { RatingDisplay } from '@/components/admin/RatingDisplay';
@@ -36,6 +36,12 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import type { Transaction, TransactionStatus } from '@/types/database';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -56,6 +62,12 @@ interface TransactionWithRatings extends Transaction {
   amount_mmk: number | null;
 }
 
+interface PaymentRecord {
+  id: string;
+  transaction_id: string;
+  screenshot_url: string | null;
+}
+
 export default function AdminTransactions() {
   const [transactions, setTransactions] = useState<TransactionWithRatings[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,6 +80,8 @@ export default function AdminTransactions() {
   const [maxAmount, setMaxAmount] = useState<string>('');
   const [ratingFilter, setRatingFilter] = useState<string>('all');
   const [isExporting, setIsExporting] = useState(false);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [paymentScreenshots, setPaymentScreenshots] = useState<Record<string, string>>({});
 
   // Store seller/buyer info for display
   const [profiles, setProfiles] = useState<Record<string, { telegram_username: string | null }>>({});
@@ -120,6 +134,20 @@ export default function AdminTransactions() {
         profilesMap[p.id] = { telegram_username: p.telegram_username };
       });
       setProfiles(profilesMap);
+
+      // Fetch payment screenshots for transactions
+      const { data: paymentsData } = await supabase
+        .from('payments')
+        .select('id, transaction_id, screenshot_url')
+        .not('screenshot_url', 'is', null);
+
+      const screenshotsMap: Record<string, string> = {};
+      paymentsData?.forEach((p) => {
+        if (p.screenshot_url) {
+          screenshotsMap[p.transaction_id] = p.screenshot_url;
+        }
+      });
+      setPaymentScreenshots(screenshotsMap);
 
       // Map ratings to transactions
       const txWithRatings: TransactionWithRatings[] = (txData || []).map((tx) => ({
@@ -485,6 +513,7 @@ export default function AdminTransactions() {
                     <TableHead>{getAmountLabel()}</TableHead>
                     <TableHead>ကော်မရှင်</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>📷</TableHead>
                     <TableHead>Rating</TableHead>
                     {currencyTab !== 'MMK' && <TableHead>TX Hash</TableHead>}
                     <TableHead className="text-right">Link</TableHead>
@@ -493,7 +522,7 @@ export default function AdminTransactions() {
                 <TableBody>
                   {filteredTransactions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={currencyTab === 'all' ? 10 : currencyTab === 'MMK' ? 8 : 9} className="h-24 text-center">
+                      <TableCell colSpan={currencyTab === 'all' ? 11 : currencyTab === 'MMK' ? 9 : 10} className="h-24 text-center">
                         ရောင်းဝယ်မှု မရှိပါ
                       </TableCell>
                     </TableRow>
@@ -537,6 +566,20 @@ export default function AdminTransactions() {
                           <TableCell>{Number(tx.commission_ton).toFixed(4)}</TableCell>
                           <TableCell>
                             <TransactionStatusBadge status={tx.status} />
+                          </TableCell>
+                          <TableCell>
+                            {paymentScreenshots[tx.id] ? (
+                              <button
+                                onClick={() => setScreenshotPreview(paymentScreenshots[tx.id])}
+                                title="Screenshot ကြည့်ရန်"
+                              >
+                                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] px-1.5 cursor-pointer hover:bg-primary/20 transition-colors">
+                                  📷 SS
+                                </Badge>
+                              </button>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">-</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             {tx.ratings && tx.ratings.length > 0 ? (
@@ -587,6 +630,32 @@ export default function AdminTransactions() {
           </CardContent>
         </Card>
       </Tabs>
+
+      {/* Screenshot Preview Dialog */}
+      <Dialog open={!!screenshotPreview} onOpenChange={() => setScreenshotPreview(null)}>
+        <DialogContent className="sm:max-w-2xl p-2">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Payment Screenshot</DialogTitle>
+          </DialogHeader>
+          {screenshotPreview && (
+            <div className="relative">
+              <img
+                src={screenshotPreview}
+                alt="Payment Screenshot"
+                className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
+              />
+              <a
+                href={screenshotPreview}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm rounded-full p-2 hover:bg-background transition-colors"
+              >
+                <Eye className="h-4 w-4" />
+              </a>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
