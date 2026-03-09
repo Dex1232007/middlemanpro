@@ -292,6 +292,11 @@ const cancelBtn = (lang: Language = "my") => ({
   inline_keyboard: [[{ text: t(lang, "menu.cancel"), callback_data: "m:home" }]],
 });
 
+// Terms acceptance button
+const termsAcceptBtn = (lang: Language = "my") => ({
+  inline_keyboard: [[{ text: t(lang, "terms.accept_btn"), callback_data: "terms:accept" }]],
+});
+
 // Deposit payment method selection
 interface PaymentMethodSettings {
   kbzpayEnabled: boolean;
