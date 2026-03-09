@@ -244,21 +244,24 @@ export default function AdminTransactions() {
     
     setIsActionProcessing(true);
     try {
-      const newStatus = actionType === 'confirm' ? 'completed' : 'cancelled';
+      const shouldCompleteNow = selectedTx.status === 'item_sent' || selectedTx.status === 'disputed';
+      const newStatus: TransactionStatus = actionType === 'confirm'
+        ? (shouldCompleteNow ? 'completed' : 'payment_received')
+        : 'cancelled';
       
       // Update transaction status
       const { error: updateError } = await supabase
         .from('transactions')
         .update({ 
           status: newStatus,
-          ...(actionType === 'confirm' ? { confirmed_at: new Date().toISOString() } : {}),
+          ...(actionType === 'confirm' && newStatus === 'completed' ? { confirmed_at: new Date().toISOString() } : {}),
         })
         .eq('id', selectedTx.id);
       
       if (updateError) throw updateError;
 
-      // If confirming (completed), add seller_receives_ton to seller balance
-      if (actionType === 'confirm' && selectedTx.seller_id) {
+      // Only when truly completing, add seller amount to balance
+      if (actionType === 'confirm' && newStatus === 'completed' && selectedTx.seller_id) {
         const { data: sellerProfile } = await supabase
           .from('profiles')
           .select('balance, balance_mmk')
@@ -282,13 +285,14 @@ export default function AdminTransactions() {
       const sellerUsername = selectedTx.seller_id ? profiles[selectedTx.seller_id]?.telegram_username : null;
       const buyerUsername = selectedTx.buyer_id ? profiles[selectedTx.buyer_id]?.telegram_username : null;
       const buyerTelegramId = selectedTx.buyer_id ? profiles[selectedTx.buyer_id]?.telegram_id : null;
-      const sellerTelegramId = selectedTx.seller_id ? profiles[selectedTx.seller_id]?.telegram_id : null;
 
       // Notify seller
       if (selectedTx.seller_id) {
         await supabase.functions.invoke('notify-user', {
           body: {
-            type: actionType === 'confirm' ? 'transaction_admin_completed' : 'transaction_admin_cancelled',
+            type: actionType === 'confirm'
+              ? (newStatus === 'payment_received' ? 'transaction_admin_payment_confirmed' : 'transaction_admin_completed')
+              : 'transaction_admin_cancelled',
             profile_id: selectedTx.seller_id,
             amount: selectedTx.currency === 'MMK' ? selectedTx.amount_mmk : selectedTx.amount_ton,
             currency: selectedTx.currency,
@@ -307,7 +311,9 @@ export default function AdminTransactions() {
       if (selectedTx.buyer_id) {
         await supabase.functions.invoke('notify-user', {
           body: {
-            type: actionType === 'confirm' ? 'transaction_admin_completed' : 'transaction_admin_cancelled',
+            type: actionType === 'confirm'
+              ? (newStatus === 'payment_received' ? 'transaction_admin_payment_confirmed' : 'transaction_admin_completed')
+              : 'transaction_admin_cancelled',
             profile_id: selectedTx.buyer_id,
             amount: selectedTx.currency === 'MMK' ? selectedTx.amount_mmk : selectedTx.amount_ton,
             currency: selectedTx.currency,
@@ -323,9 +329,10 @@ export default function AdminTransactions() {
         });
       }
 
+      const statusLabel = newStatus === 'payment_received' ? 'payment_received (စတင်)' : newStatus;
       toast({
         title: actionType === 'confirm' ? '✅ အတည်ပြုပြီးပါပြီ' : '❌ ပယ်ဖျက်ပြီးပါပြီ',
-        description: `Transaction ကို ${actionType === 'confirm' ? 'completed' : 'cancelled'} သို့ပြောင်းပြီးပါပြီ`,
+        description: `Transaction ကို ${statusLabel} သို့ပြောင်းပြီးပါပြီ`,
       });
       
       setActionType(null);
@@ -973,7 +980,7 @@ export default function AdminTransactions() {
                         onClick={() => setActionType('confirm')}
                       >
                         <CheckCircle className="mr-2 h-4 w-4" />
-                        အတည်ပြု (Complete)
+                        အတည်ပြု
                       </Button>
                       <Button
                         className="flex-1"
@@ -1027,7 +1034,9 @@ export default function AdminTransactions() {
             </DialogTitle>
             <DialogDescription>
               {actionType === 'confirm' 
-                ? 'Transaction ကို completed အဖြစ် ပြောင်းပြီး ရောင်းသူ balance ထဲသို့ ငွေထည့်ပေးမည်။'
+                ? (selectedTx?.status === 'item_sent' || selectedTx?.status === 'disputed'
+                  ? 'Transaction ကို completed အဖြစ် ပြောင်းပြီး ရောင်းသူ balance ထဲသို့ ငွေထည့်ပေးမည်။'
+                  : 'Transaction ကို payment_received အဖြစ် ပြောင်းပြီး ရောင်းဝယ်မှုကို စတင်ပေးမည်။')
                 : 'Transaction ကို cancelled အဖြစ် ပြောင်းမည်။'}
               {' '}အကြောင်းပြချက်ကို user ဆီ Telegram မှတဆင့် ပို့ပေးပါမည်။
             </DialogDescription>
