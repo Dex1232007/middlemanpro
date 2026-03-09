@@ -123,9 +123,6 @@ export default function AdminUsers() {
     setSelectedUser(user);
     setIsProfileDialogOpen(true);
   };
-      setIsLoadingProfile(false);
-    }
-  };
 
   const handleBlockUser = async () => {
     if (!selectedUser) return;
