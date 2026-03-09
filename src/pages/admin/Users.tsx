@@ -413,7 +413,7 @@ export default function AdminUsers() {
                         <TableCell>
                           {format(new Date(user.created_at), 'yyyy-MM-dd')}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex flex-wrap justify-end gap-1">
                             <Button
                               size="sm"
