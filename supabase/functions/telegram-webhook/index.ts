@@ -5421,6 +5421,17 @@ async function handleCallback(cb: {
     return;
   }
 
+  // History pagination: hist:type:page
+  if (type === "hist") {
+    await answerCb(cb.id);
+    const histType = (action || 'all') as 'all' | 'sold' | 'bought';
+    const histPage = parseInt(id || '0') || 0;
+    await showHistory(chatId, msgId, username, histPage, histType);
+    return;
+  }
+
+  // Original return removed - handled above
+
   // Language selection
   if (type === "lang") {
     await answerCb(cb.id);
