@@ -32,6 +32,23 @@ async function sendTelegramMessage(chatId: number, text: string, parseMode = 'Ma
   return result
 }
 
+async function deleteTelegramMessage(chatId: number, messageId: number) {
+  try {
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteMessage`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+    })
+    const result = await response.json()
+    console.log('Delete message result:', result)
+    return result.ok
+  } catch (e) {
+    console.error('Delete message error:', e)
+    return false
+  }
+}
+
 async function sendTelegramPhoto(chatId: number, photoUrl: string, caption: string, parseMode = 'Markdown', keyboard?: object) {
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`
   const body: Record<string, unknown> = {
