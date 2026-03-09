@@ -141,6 +141,7 @@ export default function AdminDeposits() {
   const [selectedDeposit, setSelectedDeposit] = useState<Deposit | null>(null);
   const [approvalNotes, setApprovalNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDeposits();
@@ -681,9 +682,15 @@ export default function AdminDeposits() {
                           <div className="flex items-center gap-1">
                             <PaymentMethodBadge method={dep.payment_method} />
                             {dep.screenshot_url && (
-                              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] px-1.5">
-                                📷
-                              </Badge>
+                              <button
+                                onClick={() => setScreenshotPreview(dep.screenshot_url)}
+                                className="inline-flex items-center"
+                                title="Screenshot ကြည့်ရန်"
+                              >
+                                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] px-1.5 cursor-pointer hover:bg-primary/20 transition-colors">
+                                  📷 SS
+                                </Badge>
+                              </button>
                             )}
                           </div>
                         </TableCell>
@@ -822,6 +829,31 @@ export default function AdminDeposits() {
               {isProcessing ? 'Processing...' : 'အတည်ပြု'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Screenshot Preview Dialog */}
+      <Dialog open={!!screenshotPreview} onOpenChange={() => setScreenshotPreview(null)}>
+        <DialogContent className="sm:max-w-2xl p-2">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Payment Screenshot</DialogTitle>
+          </DialogHeader>
+          {screenshotPreview && (
+            <div className="relative">
+              <img
+                src={screenshotPreview}
+                alt="Payment Screenshot"
+                className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
+              />
+              <a
+                href={screenshotPreview}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm rounded-full p-2 hover:bg-background transition-colors"
+              >
+                <Eye className="h-4 w-4" />
+              </a>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </AdminLayout>
