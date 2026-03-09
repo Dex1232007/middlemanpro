@@ -734,6 +734,30 @@ ${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${bod
         }
       }
 
+      case 'dispute_admin_message': {
+        const adminChatMsg = `👨‍💼 *Admin မှ Dispute Chat*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 *${body.product_title || 'ပစ္စည်း'}*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💬 ${body.custom_message || (body as any).message || ''}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+_Admin မှ ပို့သော message ဖြစ်ပါသည်_`
+        const dchatKb = body.transaction_id ? {
+          inline_keyboard: [
+            [{ text: '💬 Chat ဖွင့်ပြီး ပြန်ရေးမည်', callback_data: `dchat:open:${body.transaction_id}` }],
+            [{ text: '🏠 ပင်မစာမျက်နှာ', callback_data: 'm:home' }],
+          ]
+        } : undefined
+        await sendTelegramMessage(telegramId, adminChatMsg, 'Markdown', dchatKb)
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
       case 'custom':
         message = body.custom_message || 'Notification from Middleman Bot'
         break
