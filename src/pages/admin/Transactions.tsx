@@ -1034,7 +1034,9 @@ export default function AdminTransactions() {
             </DialogTitle>
             <DialogDescription>
               {actionType === 'confirm' 
-                ? 'Transaction ကို completed အဖြစ် ပြောင်းပြီး ရောင်းသူ balance ထဲသို့ ငွေထည့်ပေးမည်။'
+                ? (selectedTx?.status === 'item_sent' || selectedTx?.status === 'disputed'
+                  ? 'Transaction ကို completed အဖြစ် ပြောင်းပြီး ရောင်းသူ balance ထဲသို့ ငွေထည့်ပေးမည်။'
+                  : 'Transaction ကို payment_received အဖြစ် ပြောင်းပြီး ရောင်းဝယ်မှုကို စတင်ပေးမည်။')
                 : 'Transaction ကို cancelled အဖြစ် ပြောင်းမည်။'}
               {' '}အကြောင်းပြချက်ကို user ဆီ Telegram မှတဆင့် ပို့ပေးပါမည်။
             </DialogDescription>
