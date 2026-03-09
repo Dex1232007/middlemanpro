@@ -604,6 +604,7 @@ export default function AdminTransactions() {
                             <TableCell>
                               {tx.ton_tx_hash ? (
                                 <a
+                                  onClick={(e) => e.stopPropagation()}
                                   href={`https://tonscan.org/tx/${tx.ton_tx_hash}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
