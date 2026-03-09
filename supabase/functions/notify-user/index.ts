@@ -549,6 +549,53 @@ ${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${bod
 ⚠️ ပြန်လည်ကြိုးစားလိုပါက ငွေထုတ်ယူမှုအသစ် ပြုလုပ်ပါ။`
         break
 
+      case 'transaction_admin_completed':
+        const isTonComp = body.currency === 'TON'
+        if (body.role === 'seller') {
+          message = `✅ *Admin မှ ရောင်းဝယ်မှု အတည်ပြုပြီးပါပြီ!*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${isTonComp ? `${Number(body.amount).toFixed(4)} TON` : `${Number(body.amount).toLocaleString()} MMK`}
+💰 *သင်ရရှိမည်:* ${isTonComp ? `${Number(body.seller_receives || 0).toFixed(4)} TON` : `${Number(body.seller_receives || 0).toLocaleString()} MMK`}
+🛒 *ဝယ်သူ:* ${body.buyer_username ? `@${body.buyer_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${body.admin_notes ? `\n📝 *Admin မှတ်ချက်:* ${body.admin_notes}\n` : ''}
+✅ သင့် Balance ထဲသို့ ငွေထည့်ပြီးပါပြီ။`
+        } else {
+          message = `✅ *Admin မှ ရောင်းဝယ်မှု အတည်ပြုပြီးပါပြီ!*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${isTonComp ? `${Number(body.amount).toFixed(4)} TON` : `${Number(body.amount).toLocaleString()} MMK`}
+🏪 *ရောင်းသူ:* ${body.seller_username ? `@${body.seller_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${body.admin_notes ? `\n📝 *Admin မှတ်ချက်:* ${body.admin_notes}\n` : ''}
+✅ ရောင်းဝယ်မှု ပြီးဆုံးပါပြီ။`
+        }
+        break
+
+      case 'transaction_admin_cancelled':
+        const isTonCanc = body.currency === 'TON'
+        if (body.role === 'seller') {
+          message = `❌ *Admin မှ ရောင်းဝယ်မှု ပယ်ဖျက်ခဲ့ပါပြီ*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${isTonCanc ? `${Number(body.amount).toFixed(4)} TON` : `${Number(body.amount).toLocaleString()} MMK`}
+🛒 *ဝယ်သူ:* ${body.buyer_username ? `@${body.buyer_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${body.admin_notes}\n` : ''}
+⚠️ ရောင်းဝယ်မှု ပယ်ဖျက်ခံရပါပြီ။`
+        } else {
+          message = `❌ *Admin မှ ရောင်းဝယ်မှု ပယ်ဖျက်ခဲ့ပါပြီ*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+💵 *ပမာဏ:* ${isTonCanc ? `${Number(body.amount).toFixed(4)} TON` : `${Number(body.amount).toLocaleString()} MMK`}
+🏪 *ရောင်းသူ:* ${body.seller_username ? `@${body.seller_username}` : 'Unknown'}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+${body.admin_notes ? `\n📝 *အကြောင်းပြချက်:* ${body.admin_notes}\n` : ''}
+⚠️ ရောင်းဝယ်မှု ပယ်ဖျက်ခံရပါပြီ။`
+        }
+        break
+
       case 'custom':
         message = body.custom_message || 'Notification from Middleman Bot'
         break
