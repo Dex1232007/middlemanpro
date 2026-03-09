@@ -32,6 +32,27 @@ async function sendTelegramMessage(chatId: number, text: string, parseMode = 'Ma
   return result
 }
 
+async function sendTelegramPhoto(chatId: number, photoUrl: string, caption: string, parseMode = 'Markdown', keyboard?: object) {
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`
+  const body: Record<string, unknown> = {
+    chat_id: chatId,
+    photo: photoUrl,
+    caption,
+    parse_mode: parseMode,
+  }
+  if (keyboard) body.reply_markup = keyboard
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  
+  const result = await response.json()
+  console.log('Telegram photo send result:', result)
+  return result
+}
+
 interface NotifyRequest {
   type: 'withdrawal_approved' | 'withdrawal_rejected' | 'dispute_resolved_buyer' | 'dispute_resolved_seller' | 'deposit_confirmed' | 'custom' | 'admin_new_dispute' | 'admin_new_withdrawal' | 'admin_high_value_tx' | 'admin_new_deposit' | 'admin_transaction_completed' | 'mmk_deposit_approved' | 'mmk_deposit_rejected' | 'admin_new_mmk_withdrawal' | 'mmk_withdrawal_approved' | 'mmk_withdrawal_rejected' | 'admin_new_mmk_deposit' | 'admin_new_mmk_payment'
   profile_id?: string
