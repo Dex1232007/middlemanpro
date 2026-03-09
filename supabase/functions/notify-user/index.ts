@@ -81,6 +81,7 @@ interface NotifyRequest {
   deposit_id?: string
   payment_id?: string
   transaction_id?: string
+  screenshot_url?: string
 }
 
 async function verifyAdminAuth(req: Request): Promise<{ authorized: boolean; error?: string }> {
