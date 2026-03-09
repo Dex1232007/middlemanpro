@@ -461,13 +461,9 @@ ${depMethodIcon} *Payment:* ${depMethodName}
       case 'admin_new_mmk_payment':
         const payMethodName = body.payment_method === 'KBZPAY' ? 'KBZPay' : body.payment_method === 'WAVEPAY' ? 'WavePay' : 'MMK'
         const payMethodIcon = body.payment_method === 'KBZPAY' ? '📱' : '📲'
-        message = `💵 *MMK ဝယ်ယူမှုငွေချေ အသစ်!*
+        const payCaption = `💵 *MMK ဝယ်ယူမှုငွေချေ အသစ်!*
 
-╔══════════════════════════════╗
-║                              ║
-║   ${payMethodIcon} *NEW MMK PAYMENT*      ║
-║                              ║
-╚══════════════════════════════╝
+${payMethodIcon} *NEW MMK PAYMENT*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 💵 *ပမာဏ:* ${Number(body.amount).toLocaleString()} MMK
@@ -490,11 +486,18 @@ ${payMethodIcon} *Payment:* ${payMethodName}
               ]
             ]
           }
-          await sendTelegramMessage(telegramId, message, 'Markdown', mmkPayBtns)
+          
+          // Send photo with screenshot if available, otherwise send text
+          if (body.screenshot_url) {
+            await sendTelegramPhoto(telegramId, body.screenshot_url, payCaption, 'Markdown', mmkPayBtns)
+          } else {
+            await sendTelegramMessage(telegramId, payCaption, 'Markdown', mmkPayBtns)
+          }
           
           return new Response(
             JSON.stringify({ success: true }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
           )
         }
         break
