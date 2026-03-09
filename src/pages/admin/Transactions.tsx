@@ -89,6 +89,11 @@ export default function AdminTransactions() {
   const [paymentScreenshots, setPaymentScreenshots] = useState<Record<string, string>>({});
   const [selectedTx, setSelectedTx] = useState<TransactionWithRatings | null>(null);
 
+  // Action dialog states
+  const [actionType, setActionType] = useState<'confirm' | 'reject' | null>(null);
+  const [actionReason, setActionReason] = useState('');
+  const [isActionProcessing, setIsActionProcessing] = useState(false);
+
   // Store seller/buyer info for display
   const [profiles, setProfiles] = useState<Record<string, { telegram_username: string | null }>>({});
 
