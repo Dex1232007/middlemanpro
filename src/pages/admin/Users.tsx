@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { Search, RefreshCw, Wallet, MessageCircle, Plus, Minus, Loader2, Ban, CheckCircle, Filter, Star, Eye } from 'lucide-react';
+import { Search, RefreshCw, Wallet, MessageCircle, Plus, Minus, Loader2, Ban, CheckCircle, Filter, Star, Eye, Clock, Package, CreditCard, ArrowDownToLine, ArrowUpFromLine, Copy, ExternalLink, ShieldAlert, XCircle } from 'lucide-react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +37,9 @@ import {
 } from '@/components/ui/select';
 import { RatingDisplay, RatingSummary } from '@/components/admin/RatingDisplay';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
+import { TransactionStatusBadge } from '@/components/admin/StatusBadge';
 
 type StatusFilter = 'all' | 'active' | 'blocked';
 
@@ -80,7 +83,11 @@ export default function AdminUsers() {
   // Profile detail dialog states
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
   const [profileRatings, setProfileRatings] = useState<UserRating[]>([]);
-  const [isLoadingRatings, setIsLoadingRatings] = useState(false);
+  const [profileTransactions, setProfileTransactions] = useState<any[]>([]);
+  const [profileDeposits, setProfileDeposits] = useState<any[]>([]);
+  const [profileWithdrawals, setProfileWithdrawals] = useState<any[]>([]);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [profileTab, setProfileTab] = useState('overview');
 
   useEffect(() => {
     fetchUsers();
@@ -120,48 +127,54 @@ export default function AdminUsers() {
   const openProfileDialog = async (user: ExtendedProfile) => {
     setSelectedUser(user);
     setIsProfileDialogOpen(true);
-    setIsLoadingRatings(true);
+    setProfileTab('overview');
+    setIsLoadingProfile(true);
     
     try {
-      // Fetch ratings for this user (where they are rated)
-      const { data, error } = await supabase
-        .from('ratings')
-        .select(`
-          id,
-          rating,
-          comment,
-          created_at,
-          rater_id,
-          transaction_id
-        `)
-        .eq('rated_id', user.id)
-        .order('created_at', { ascending: false });
+      // Fetch all data in parallel
+      const [ratingsRes, txRes, depositsRes, withdrawalsRes] = await Promise.all([
+        // Ratings
+        supabase.from('ratings').select('id, rating, comment, created_at, rater_id, transaction_id')
+          .eq('rated_id', user.id).order('created_at', { ascending: false }),
+        // Transactions (as seller or buyer)
+        supabase.from('transactions').select('*')
+          .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`)
+          .order('created_at', { ascending: false }).limit(50),
+        // Deposits
+        supabase.from('deposits').select('*')
+          .eq('profile_id', user.id).order('created_at', { ascending: false }).limit(50),
+        // Withdrawals
+        supabase.from('withdrawals').select('*')
+          .eq('profile_id', user.id).order('created_at', { ascending: false }).limit(50),
+      ]);
 
-      if (error) throw error;
+      // Fetch rater profiles for ratings
+      const raterIds = [...new Set((ratingsRes.data || []).map(r => r.rater_id))];
+      let raterMap: Record<string, { telegram_username: string | null }> = {};
+      if (raterIds.length > 0) {
+        const { data: raterProfiles } = await supabase
+          .from('profiles').select('id, telegram_username').in('id', raterIds);
+        raterProfiles?.forEach(p => { raterMap[p.id] = { telegram_username: p.telegram_username }; });
+      }
 
-      // Fetch rater profiles
-      const raterIds = [...new Set((data || []).map(r => r.rater_id))];
-      const { data: raterProfiles } = await supabase
-        .from('profiles')
-        .select('id, telegram_username')
-        .in('id', raterIds);
+      // Fetch seller/buyer profiles for transactions
+      const txData = txRes.data || [];
+      const profileIds = [...new Set(txData.flatMap(tx => [tx.seller_id, tx.buyer_id].filter(Boolean)))];
+      let txProfileMap: Record<string, string> = {};
+      if (profileIds.length > 0) {
+        const { data: txProfiles } = await supabase
+          .from('profiles').select('id, telegram_username').in('id', profileIds as string[]);
+        txProfiles?.forEach(p => { txProfileMap[p.id] = p.telegram_username || 'unknown'; });
+      }
 
-      const raterMap: Record<string, { telegram_username: string | null }> = {};
-      raterProfiles?.forEach(p => {
-        raterMap[p.id] = { telegram_username: p.telegram_username };
-      });
-
-      const ratingsWithRater = (data || []).map(r => ({
-        ...r,
-        rater: raterMap[r.rater_id] || { telegram_username: null }
-      }));
-
-      setProfileRatings(ratingsWithRater);
+      setProfileRatings((ratingsRes.data || []).map(r => ({ ...r, rater: raterMap[r.rater_id] || { telegram_username: null } })));
+      setProfileTransactions(txData.map(tx => ({ ...tx, _sellerName: txProfileMap[tx.seller_id || ''], _buyerName: txProfileMap[tx.buyer_id || ''] })));
+      setProfileDeposits(depositsRes.data || []);
+      setProfileWithdrawals(withdrawalsRes.data || []);
     } catch (error) {
-      console.error('Error fetching ratings:', error);
-      toast.error('Ratings ယူရာတွင် အမှားရှိပါသည်');
+      console.error('Error fetching profile data:', error);
     } finally {
-      setIsLoadingRatings(false);
+      setIsLoadingProfile(false);
     }
   };
 
@@ -337,7 +350,7 @@ export default function AdminUsers() {
                     </TableRow>
                   ) : (
                     filteredUsers.map((user) => (
-                      <TableRow key={user.id} className={user.is_blocked ? 'bg-destructive/5' : ''}>
+                      <TableRow key={user.id} className={`cursor-pointer ${user.is_blocked ? 'bg-destructive/5' : ''}`} onClick={() => openProfileDialog(user)}>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <MessageCircle className="h-4 w-4 text-primary" />
@@ -400,7 +413,7 @@ export default function AdminUsers() {
                         <TableCell>
                           {format(new Date(user.created_at), 'yyyy-MM-dd')}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex flex-wrap justify-end gap-1">
                             <Button
                               size="sm"
@@ -594,90 +607,233 @@ export default function AdminUsers() {
         </DialogContent>
       </Dialog>
 
-      {/* User Profile/Ratings Dialog */}
+      {/* User Profile Detail Dialog */}
       <Dialog open={isProfileDialogOpen} onOpenChange={setIsProfileDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Star className="h-5 w-5 text-amber-500" />
-              @{selectedUser?.telegram_username || 'unknown'} ၏ Rating များ
+              <Eye className="h-5 w-5 text-primary" />
+              @{selectedUser?.telegram_username || 'unknown'} ၏ အသေးစိတ်
             </DialogTitle>
-            <DialogDescription asChild>
-              {selectedUser && (
-                <div className="mt-2">
-                  <div className="p-3 bg-muted rounded-lg space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span>ပျမ်းမျှ Rating:</span>
-                      <RatingSummary 
-                        avgRating={selectedUser.avg_rating ?? null} 
-                        totalRatings={selectedUser.total_ratings ?? null}
-                        size="md"
-                      />
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Telegram ID:</span>
-                      <strong>{selectedUser.telegram_id || 'N/A'}</strong>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>လက်ကျန်:</span>
-                      <strong>{Number(selectedUser.balance).toFixed(4)} TON</strong>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </DialogDescription>
+            <DialogDescription>User profile, transactions, deposits, withdrawals, ratings</DialogDescription>
           </DialogHeader>
 
-          <div className="mt-4">
-            <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-              <MessageCircle className="h-4 w-4" />
-              Rating အသေးစိတ် ({profileRatings.length} ခု)
-            </h4>
-            
-            {isLoadingRatings ? (
-              <div className="space-y-2">
-                {[...Array(3)].map((_, i) => (
-                  <Skeleton key={i} className="h-16" />
-                ))}
-              </div>
-            ) : profileRatings.length === 0 ? (
-              <div className="text-center py-6 text-muted-foreground">
-                Rating မရှိသေးပါ
-              </div>
-            ) : (
-              <ScrollArea className="h-[300px] pr-4">
-                <div className="space-y-3">
-                  {profileRatings.map((rating) => (
-                    <div 
-                      key={rating.id} 
-                      className="p-3 border rounded-lg bg-card"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <RatingDisplay rating={rating.rating} showComment={false} />
-                        <span className="text-xs text-muted-foreground">
-                          {format(new Date(rating.created_at), 'yyyy-MM-dd HH:mm')}
-                        </span>
-                      </div>
-                      {rating.comment && (
-                        <p className="text-sm text-muted-foreground italic border-l-2 border-primary/30 pl-2 mt-2">
-                          "{rating.comment}"
-                        </p>
-                      )}
-                      <div className="text-xs text-muted-foreground mt-2">
-                        Rating ပေးသူ: @{rating.rater?.telegram_username || 'unknown'}
-                      </div>
-                    </div>
-                  ))}
+          {selectedUser && (
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {/* Profile Summary Card */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <div className="rounded-lg bg-muted/50 p-3 text-center">
+                  <p className="text-lg font-bold font-mono">{Number(selectedUser.balance).toFixed(4)}</p>
+                  <p className="text-[10px] text-muted-foreground">💎 TON Balance</p>
                 </div>
-              </ScrollArea>
-            )}
-          </div>
+                <div className="rounded-lg bg-muted/50 p-3 text-center">
+                  <p className="text-lg font-bold font-mono">{Number((selectedUser as any).balance_mmk || 0).toLocaleString()}</p>
+                  <p className="text-[10px] text-muted-foreground">💵 MMK Balance</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-3 text-center">
+                  <RatingSummary avgRating={selectedUser.avg_rating ?? null} totalRatings={selectedUser.total_ratings ?? null} />
+                </div>
+                <div className="rounded-lg bg-muted/50 p-3 text-center">
+                  <p className="text-sm font-medium">{format(new Date(selectedUser.created_at), 'yyyy-MM-dd')}</p>
+                  <p className="text-[10px] text-muted-foreground">စာရင်းသွင်းရက်</p>
+                </div>
+              </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsProfileDialogOpen(false)}>
-              ပိတ်မည်
-            </Button>
-          </DialogFooter>
+              {/* Tabs */}
+              <Tabs value={profileTab} onValueChange={setProfileTab} className="flex-1 overflow-hidden flex flex-col">
+                <TabsList className="grid w-full grid-cols-5">
+                  <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
+                  <TabsTrigger value="transactions" className="text-xs flex gap-1">
+                    Tx <Badge variant="secondary" className="text-[9px] h-4 px-1">{profileTransactions.length}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="deposits" className="text-xs flex gap-1">
+                    Dep <Badge variant="secondary" className="text-[9px] h-4 px-1">{profileDeposits.length}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="withdrawals" className="text-xs flex gap-1">
+                    WD <Badge variant="secondary" className="text-[9px] h-4 px-1">{profileWithdrawals.length}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="ratings" className="text-xs flex gap-1">
+                    ⭐ <Badge variant="secondary" className="text-[9px] h-4 px-1">{profileRatings.length}</Badge>
+                  </TabsTrigger>
+                </TabsList>
+
+                <ScrollArea className="flex-1 mt-3" style={{ maxHeight: '400px' }}>
+                  {isLoadingProfile ? (
+                    <div className="space-y-3 p-2">
+                      {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-14" />)}
+                    </div>
+                  ) : (
+                    <>
+                      {/* Overview Tab */}
+                      <TabsContent value="overview" className="mt-0 space-y-3 pr-4">
+                        <div className="rounded-lg border p-3 space-y-2 text-sm">
+                          <div className="flex justify-between"><span className="text-muted-foreground">Telegram ID</span><span className="font-mono">{selectedUser.telegram_id || 'N/A'}</span></div>
+                          <div className="flex justify-between"><span className="text-muted-foreground">Username</span><span>@{selectedUser.telegram_username || 'unknown'}</span></div>
+                          <div className="flex justify-between"><span className="text-muted-foreground">Language</span><span>{(selectedUser as any).language || 'my'}</span></div>
+                          {selectedUser.ton_wallet_address && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">Wallet</span>
+                              <button onClick={() => { navigator.clipboard.writeText(selectedUser.ton_wallet_address!); toast.success('Copied!'); }} className="flex items-center gap-1 font-mono text-xs text-primary hover:underline">
+                                {selectedUser.ton_wallet_address.slice(0, 10)}...{selectedUser.ton_wallet_address.slice(-6)}
+                                <Copy className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )}
+                          {(selectedUser as any).referral_code && (
+                            <div className="flex justify-between"><span className="text-muted-foreground">Referral Code</span><code className="text-xs bg-muted px-2 py-0.5 rounded">{(selectedUser as any).referral_code}</code></div>
+                          )}
+                          <Separator />
+                          <div className="flex justify-between"><span className="text-muted-foreground">Status</span>{selectedUser.is_blocked ? <Badge variant="destructive">Blocked</Badge> : <Badge variant="outline" className="border-emerald-500 text-emerald-600">Active</Badge>}</div>
+                          {selectedUser.is_blocked && selectedUser.blocked_reason && (
+                            <div className="flex justify-between"><span className="text-muted-foreground">Block Reason</span><span className="text-destructive text-xs">{selectedUser.blocked_reason}</span></div>
+                          )}
+                        </div>
+
+                        {/* Quick stats */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="rounded-lg border p-2 text-center">
+                            <p className="text-lg font-bold">{profileTransactions.length}</p>
+                            <p className="text-[10px] text-muted-foreground">Transactions</p>
+                          </div>
+                          <div className="rounded-lg border p-2 text-center">
+                            <p className="text-lg font-bold">{profileDeposits.length}</p>
+                            <p className="text-[10px] text-muted-foreground">Deposits</p>
+                          </div>
+                          <div className="rounded-lg border p-2 text-center">
+                            <p className="text-lg font-bold">{profileWithdrawals.length}</p>
+                            <p className="text-[10px] text-muted-foreground">Withdrawals</p>
+                          </div>
+                        </div>
+                      </TabsContent>
+
+                      {/* Transactions Tab */}
+                      <TabsContent value="transactions" className="mt-0 pr-4">
+                        {profileTransactions.length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground">Transaction မရှိသေးပါ</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {profileTransactions.map(tx => (
+                              <div key={tx.id} className="rounded-lg border p-3 space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <TransactionStatusBadge status={tx.status} />
+                                  <span className="text-xs text-muted-foreground">{format(new Date(tx.created_at), 'MM-dd HH:mm')}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                  <span className="font-mono font-bold">
+                                    {tx.currency === 'MMK' ? `${Number(tx.amount_mmk || 0).toLocaleString()} Ks` : `${Number(tx.amount_ton).toFixed(4)} TON`}
+                                  </span>
+                                  <Badge variant="outline" className="text-[10px]">{tx.currency === 'TON' ? '💎 TON' : '💵 MMK'}</Badge>
+                                </div>
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <span>ရောင်းသူ: @{tx._sellerName || '-'}</span>
+                                  <ArrowDownToLine className="h-3 w-3 mx-1" />
+                                  <span>ဝယ်သူ: @{tx._buyerName || '-'}</span>
+                                </div>
+                                {tx.seller_id === selectedUser.id && (
+                                  <Badge className="text-[9px]" variant="secondary">ရောင်းသူ</Badge>
+                                )}
+                                {tx.buyer_id === selectedUser.id && (
+                                  <Badge className="text-[9px]" variant="secondary">ဝယ်သူ</Badge>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </TabsContent>
+
+                      {/* Deposits Tab */}
+                      <TabsContent value="deposits" className="mt-0 pr-4">
+                        {profileDeposits.length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground">Deposit မရှိသေးပါ</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {profileDeposits.map(dep => (
+                              <div key={dep.id} className="rounded-lg border p-3">
+                                <div className="flex items-center justify-between mb-1">
+                                  <Badge variant={dep.status === 'confirmed' ? 'default' : dep.status === 'rejected' ? 'destructive' : 'secondary'} className="text-[10px]">
+                                    {dep.status === 'confirmed' ? '✅ အတည်ပြုပြီး' : dep.status === 'rejected' ? '❌ ငြင်းပယ်' : dep.status === 'expired' ? '⏰ သက်တမ်းကုန်' : '⏳ စောင့်နေ'}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">{format(new Date(dep.created_at), 'MM-dd HH:mm')}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="font-mono font-bold text-sm">
+                                    {dep.currency === 'MMK' ? `${Number(dep.amount_ton).toLocaleString()} Ks` : `${Number(dep.amount_ton).toFixed(4)} TON`}
+                                  </span>
+                                  <div className="flex gap-1">
+                                    {dep.payment_method && dep.payment_method !== 'TON' && (
+                                      <Badge variant="outline" className="text-[9px]">{dep.payment_method}</Badge>
+                                    )}
+                                    {dep.unique_code && (
+                                      <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{dep.unique_code}</code>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </TabsContent>
+
+                      {/* Withdrawals Tab */}
+                      <TabsContent value="withdrawals" className="mt-0 pr-4">
+                        {profileWithdrawals.length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground">Withdrawal မရှိသေးပါ</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {profileWithdrawals.map(wd => (
+                              <div key={wd.id} className="rounded-lg border p-3">
+                                <div className="flex items-center justify-between mb-1">
+                                  <Badge variant={wd.status === 'completed' ? 'default' : wd.status === 'rejected' ? 'destructive' : 'secondary'} className="text-[10px]">
+                                    {wd.status === 'completed' ? '✅ ပြီးစီး' : wd.status === 'approved' ? '👍 Approved' : wd.status === 'rejected' ? '❌ ငြင်းပယ်' : '⏳ စောင့်နေ'}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">{format(new Date(wd.created_at), 'MM-dd HH:mm')}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="font-mono font-bold text-sm">
+                                    {wd.currency === 'MMK' ? `${Number(wd.amount_ton).toLocaleString()} Ks` : `${Number(wd.amount_ton).toFixed(4)} TON`}
+                                  </span>
+                                  <div className="flex gap-1 items-center">
+                                    {wd.payment_method && (
+                                      <Badge variant="outline" className="text-[9px]">{wd.payment_method}</Badge>
+                                    )}
+                                  </div>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground mt-1 font-mono truncate">
+                                  → {wd.destination_wallet}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </TabsContent>
+
+                      {/* Ratings Tab */}
+                      <TabsContent value="ratings" className="mt-0 pr-4">
+                        {profileRatings.length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground">Rating မရှိသေးပါ</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {profileRatings.map((rating) => (
+                              <div key={rating.id} className="rounded-lg border p-3">
+                                <div className="flex items-center justify-between mb-1">
+                                  <RatingDisplay rating={rating.rating} showComment={false} />
+                                  <span className="text-xs text-muted-foreground">{format(new Date(rating.created_at), 'MM-dd HH:mm')}</span>
+                                </div>
+                                {rating.comment && (
+                                  <p className="text-sm text-muted-foreground italic border-l-2 border-primary/30 pl-2 mt-1">"{rating.comment}"</p>
+                                )}
+                                <p className="text-[10px] text-muted-foreground mt-1">Rating ပေးသူ: @{rating.rater?.telegram_username || 'unknown'}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </TabsContent>
+                    </>
+                  )}
+                </ScrollArea>
+              </Tabs>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </AdminLayout>
