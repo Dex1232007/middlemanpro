@@ -292,6 +292,11 @@ const cancelBtn = (lang: Language = "my") => ({
   inline_keyboard: [[{ text: t(lang, "menu.cancel"), callback_data: "m:home" }]],
 });
 
+// Terms acceptance button
+const termsAcceptBtn = (lang: Language = "my") => ({
+  inline_keyboard: [[{ text: t(lang, "terms.accept_btn"), callback_data: "terms:accept" }]],
+});
+
 // Deposit payment method selection
 interface PaymentMethodSettings {
   kbzpayEnabled: boolean;
@@ -875,6 +880,51 @@ ${t(lang, "welcome.tagline")}
 }
 
 // Helper functions removed - now using only inline keyboards
+
+// Show terms and conditions
+async function showTermsAndConditions(chatId: number, username?: string) {
+  const termsText = `📜 *စည်းမျဉ်းစည်းကမ်းများ*
+
+╔══════════════════════════════╗
+║                              ║
+║  📋 *TERMS & CONDITIONS*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔐 *Escrow Bot အသုံးပြုရန် သဘောတူရမည့်အချက်များ:*
+
+1️⃣ *အထောက်အထား စစ်မှန်ရမည်*
+   • Telegram Username ရှိရမည်
+   • လိမ်လည်မှု မပြုလုပ်ရ
+
+2️⃣ *လိမ်လည်ခြင်း တားမြစ်ချက်*
+   • ပစ္စည်းမပို့ဘဲ ငွေယူခြင်း
+   • အတုအယောင် screenshot သုံးခြင်း
+   • အခြားသူများကို လှည့်ဖြားခြင်း
+
+⚠️ *ချိုးဖောက်ပါက:*
+   • အကောင့် အပြီးအပိုင် ပိတ်မည်
+   • လက်ကျန်ငွေ သိမ်းဆည်းမည်
+   • တရားဥပဒေအရ အရေးယူနိုင်သည်
+
+3️⃣ *ရောင်းဝယ်မှု စည်းကမ်းများ*
+   • ပစ္စည်းရရှိမှသာ Confirm နှိပ်ပါ
+   • ပြဿနာရှိပါက Dispute တင်ပါ
+   • Commission 5% ကျသင့်မည်
+
+4️⃣ *ငွေထုတ်ယူခြင်း*
+   • မိမိပိုင် Wallet/Account သာ သုံးပါ
+   • မှားယွင်းလွှဲမှုကို ပြန်မရနိုင်ပါ
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ အထက်ပါ စည်းကမ်းများကို ဖတ်ရှုနားလည်ပြီး 
+   သဘောတူပါက "လက်ခံပါသည်" ခလုပ်နှိပ်ပါ။`;
+
+  await sendMessage(chatId, termsText, termsAcceptBtn("my"));
+}
 
 async function showHelp(chatId: number, msgId: number) {
   const text = `📖 *အကူအညီ*
@@ -5024,8 +5074,39 @@ async function handleMessage(msg: {
     return;
   }
 
-  // Commands
+  // Check if username is set (required to use bot)
+  if (!username) {
+    const noUsernameMsg = `⚠️ *Username လိုအပ်ပါသည်*
+
+╔══════════════════════════════╗
+║                              ║
+║   📛 *USERNAME REQUIRED*     ║
+║                              ║
+╚══════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Bot အသုံးပြုရန် Telegram Username 
+သတ်မှတ်ထားရန် လိုအပ်ပါသည်။
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📱 *သတ်မှတ်နည်း:*
+Telegram Settings → Edit Profile → Username
+
+✅ Username သတ်မှတ်ပြီးပါက /start ပြန်နှိပ်ပါ။`;
+    await sendMessage(chatId, noUsernameMsg);
+    return;
+  }
+
+  // Check terms acceptance for /start command
   if (text === "/start" || text.startsWith("/start ")) {
+    const profile = await getProfile(chatId, username);
+    
+    // If terms not accepted, show terms first
+    if (!profile.terms_accepted_at) {
+      await showTermsAndConditions(chatId, username);
+      return;
+    }
+    
     const parts = text.split(" ");
     if (parts[1]?.startsWith("buy_")) {
       await handleBuyLink(chatId, parts[1].replace("buy_", ""), username);
@@ -5424,6 +5505,23 @@ async function handleCallback(cb: {
   }
 
   const [type, action, id] = data.split(":");
+
+  // Terms acceptance callback
+  if (type === "terms" && action === "accept") {
+    await answerCb(cb.id, "✅ စည်းကမ်းများ လက်ခံပြီး!");
+    
+    // Update profile with terms accepted timestamp
+    const profile = await getProfile(telegramId, username);
+    await supabase
+      .from("profiles")
+      .update({ terms_accepted_at: new Date().toISOString() })
+      .eq("id", profile.id);
+    
+    // Delete terms message and show home
+    await deleteMsg(chatId, msgId);
+    await showHome(chatId, undefined, username);
+    return;
+  }
 
   // Menu
   if (type === "m") {

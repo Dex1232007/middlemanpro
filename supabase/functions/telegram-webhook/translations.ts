@@ -86,6 +86,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'common.amount': 'ပမာဏ',
     'common.phone': 'ဖုန်းနံပါတ်',
     'common.wallet': 'Wallet',
+    
+    // Terms and Conditions
+    'terms.no_username': '⚠️ *Username လိုအပ်ပါသည်*\n\nBot အသုံးပြုရန် Telegram Username သတ်မှတ်ထားရန် လိုအပ်ပါသည်။\n\n📱 *သတ်မှတ်နည်း:*\nTelegram Settings → Edit Profile → Username\n\n✅ Username သတ်မှတ်ပြီးပါက /start ပြန်နှိပ်ပါ။',
+    'terms.accept_btn': '✅ လက်ခံပါသည်',
   },
   
   en: {
@@ -172,6 +176,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'common.amount': 'Amount',
     'common.phone': 'Phone Number',
     'common.wallet': 'Wallet',
+    
+    // Terms and Conditions
+    'terms.no_username': '⚠️ *Username Required*\n\nYou must set a Telegram Username to use this bot.\n\n📱 *How to set:*\nTelegram Settings → Edit Profile → Username\n\n✅ After setting username, press /start again.',
+    'terms.accept_btn': '✅ Accept',
   }
 }
 
