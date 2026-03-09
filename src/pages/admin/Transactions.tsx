@@ -84,6 +84,7 @@ export default function AdminTransactions() {
   const [isExporting, setIsExporting] = useState(false);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [paymentScreenshots, setPaymentScreenshots] = useState<Record<string, string>>({});
+  const [selectedTx, setSelectedTx] = useState<TransactionWithRatings | null>(null);
 
   // Store seller/buyer info for display
   const [profiles, setProfiles] = useState<Record<string, { telegram_username: string | null }>>({});
