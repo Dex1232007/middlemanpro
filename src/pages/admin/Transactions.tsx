@@ -980,7 +980,7 @@ export default function AdminTransactions() {
                         onClick={() => setActionType('confirm')}
                       >
                         <CheckCircle className="mr-2 h-4 w-4" />
-                        အတည်ပြု (Complete)
+                        အတည်ပြု
                       </Button>
                       <Button
                         className="flex-1"
